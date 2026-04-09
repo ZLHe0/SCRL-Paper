@@ -133,7 +133,7 @@ When a new skill $S_{\text{new}}$ is proposed by the creator pipeline, it enters
     \theta_{\text{inc}} \sim \text{Beta}(\alpha_{\text{inc}}, \beta_{\text{inc}}), \quad \theta_{\text{exc}} \sim \text{Beta}(\alpha_{\text{exc}}, \beta_{\text{exc}}),
     \label{eq:thompson_posteriors}
 \end{equation}
-initialized with uniform priors $\text{Beta}(1, 1)$. At the start of each episode, the include/exclude decision is sampled via Thompson Sampling:
+initialized with uniform priors $\text{Beta}(1, 1)$. At the start of each episode, the include/exclude decision is sampled via Thompson Sampling (Use 7, it's approximated):
 \begin{equation}
     d = \mathbf{1}[\theta_{\text{inc}} > \theta_{\text{exc}}], \quad \text{with } \Pr(\text{include}) = \text{clamp}\!\left(\Pr(\theta_{\text{inc}} > \theta_{\text{exc}}),\, p_{\min},\, p_{\max}\right),
     \label{eq:thompson_decision}
