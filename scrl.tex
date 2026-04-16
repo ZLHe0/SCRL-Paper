@@ -275,60 +275,43 @@ We build on the VeRL framework \citep{sheng2025hybridflow} with Ray-based distri
 \subsection{Main Results}
 
 \begin{table*}[!t]
-\caption{Results on WebShop and ALFWorld (Qwen3-4B). WebShop reports validation success rate (SR, \%) and task score (0--1). ALFWorld reports per-category validation accuracy (\%). Best results in each column are \textbf{bolded}. Prompt-based methods use zero-shot or retrieval-augmented inference; RL methods report results at the specified training step.}
-\label{tab:webshop_alfworld}
+\caption{Main results (Qwen3-4B). WebShop$^\dagger$ reports validation SR (\%) and score (0--1). ALFWorld reports per-category validation accuracy (\%) at step 105. Search reports validation EM accuracy (\%) at step 245, grouped by hop type (SH/MH) and distribution (Seen: HotpotQA, NQ; Unseen: 2Wiki, MuSiQue, TriviaQA, PopQA, Bamboogle). Best in each column \textbf{bolded}. $^\dagger$Deprecated environment; included for completeness.}
+\label{tab:main_results}
 \centering
-\footnotesize
-\setlength{\tabcolsep}{3.5pt}
-\begin{tabular}{@{}l cc c ccccccc@{}}
+\scriptsize
+\setlength{\tabcolsep}{0pt}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}l cc c cccccc c c cccc c@{}}
 \toprule
-& \multicolumn{2}{c}{\textbf{WebShop}} && \multicolumn{7}{c}{\textbf{ALFWorld}} \\
-\cmidrule(lr){2-3} \cmidrule(l){5-11}
-Method & SR & Score && Overall & P\&P & Cl\&P & H\&P & Co\&P & Pick2 & L\&L \\
+& \multicolumn{2}{c}{\textbf{WebShop}$^\dagger$} && \multicolumn{7}{c}{\textbf{ALFWorld}} && \multicolumn{5}{c}{\textbf{Search}} \\
+\cmidrule(lr){2-3} \cmidrule(lr){5-11} \cmidrule(l){13-17}
+&  &  &&  &  &  &  &  &  &  && \multicolumn{2}{c}{Seen} & \multicolumn{2}{c}{Unseen} & \\
+\cmidrule(lr){13-14} \cmidrule(lr){15-16}
+Method & SR & Score && P\&P & Clean & Heat & Cool & Pick2 & Exam & Overall && SH & MH & SH & MH & Overall \\
 \midrule
-Baseline         & 12.4 & 0.407 && 39.3 & 80.0 & 25.0 & 50.0 & 22.2 & 35.3 & 21.4 \\
-BM25             & 13.0 & 0.412 && 35.7 & 83.3 & 40.0 & 16.7 &  8.3 & 17.6 & 50.0 \\
-Contriever       &  7.4 & 0.272 && 35.7 & 90.0 &  5.0 & 16.7 & 16.7 & 17.6 & 64.3 \\
-Qwen3 Emb        & 12.8 & 0.377 && 33.6 & 86.7 &  5.0 & 33.3 & 19.4 & 11.8 & 50.0 \\
-HippoRAG         & 13.4 & 0.373 && 33.6 & 63.3 & 30.0 &  0.0 & 13.9 & 20.6 & 71.4 \\
-MemoRAG          &  6.8 & 0.261 && {--} & {--} & {--} & {--} & {--} & {--} & {--} \\
-Self-RAG         & 11.2 & 0.351 && 40.0 & 83.3 & 10.0 & 66.7 & 25.0 & 23.5 & 57.1 \\
-GraphRAG         & 11.0 & 0.371 && 40.7 & 83.3 &  5.0 & 50.0 & 19.4 & 32.4 & 71.4 \\
-Long Context     &  8.0 & 0.301 && 46.4 & 90.0 & 45.0 & 16.7 & 38.9 & 26.5 & 35.7 \\
+Baseline         & 12.4 & .407 && 80.0 & 25.0 & 50.0 & 22.2 & 35.3 & 21.4 & 39.3 && 21.3 & 30.3 & 35.0 & 23.5 & 27.4 \\
+BM25             & 13.0 & .412 && 83.3 & 40.0 & 16.7 &  8.3 & 17.6 & 50.0 & 35.7 && 25.3 & 37.3 & 43.5 & 25.3 & 32.2 \\
+Contriever       &  7.4 & .272 && 90.0 &  5.0 & 16.7 & 16.7 & 17.6 & 64.3 & 35.7 && 27.3 & 34.0 & 43.1 & 26.6 & 32.5 \\
+Qwen3 Emb        & 12.8 & .377 && 86.7 &  5.0 & 33.3 & 19.4 & 11.8 & 50.0 & 33.6 && 28.3 & 32.7 & 41.1 & 26.1 & 31.7 \\
+HippoRAG         & 13.4 & .373 && 63.3 & 30.0 &  0.0 & 13.9 & 20.6 & 71.4 & 33.6 && 30.0 & 34.0 & 46.1 & 25.5 & 33.2 \\
+MemoRAG          &  6.8 & .261 && {--} & {--} & {--} & {--} & {--} & {--} & {--} && 18.0 & 29.0 & 35.7 & 24.2 & 27.3 \\
+Self-RAG         & 11.2 & .351 && 83.3 & 10.0 & 66.7 & 25.0 & 23.5 & 57.1 & 40.0 && 24.7 & 31.7 & 41.9 & 25.9 & 31.1 \\
+GraphRAG         & 11.0 & .371 && 83.3 &  5.0 & 50.0 & 19.4 & 32.4 & 71.4 & 40.7 && 21.0 & 31.7 & 34.5 & 24.9 & 28.0 \\
+Long Context     &  8.0 & .301 && 90.0 & 45.0 & 16.7 & 38.9 & 26.5 & 35.7 & 46.4 && 32.0 & 34.0 & 49.1 & 28.0 & 35.5 \\
 \midrule
-GRPO             & 73.6 & 0.862 && 71.9 & \textbf{100.0} & 57.1 & 81.8 & 69.2 & 66.7 & 50.0 \\
-\textbf{\ours}   & \textbf{80.6} & \textbf{0.887} && \textbf{82.8} & \textbf{100.0} & \textbf{73.7} & \textbf{83.3} & \textbf{85.7} & \textbf{66.7} & \textbf{100.0} \\
+GRPO             & 73.6 & .862 && 85.7 & 36.8 & 75.0 & 78.6 & 83.3 & 83.3 & 67.2 && \textbf{47.8} & 47.3 & 49.7 & 33.7 & 45.4 \\
+SkillRL          & {--} & {--} && 81.8 & 75.0 & \textbf{83.3} & 68.8 & 72.2 & 80.0 & 75.0 && 43.9 & 49.6 & 50.6 & 31.7 & 46.2 \\
+\textbf{\ours}   & \textbf{80.6} & \textbf{.887} && \textbf{100.0} & \textbf{94.7} & 75.0 & \textbf{85.7} & \textbf{100.0} & \textbf{100.0} & \textbf{90.6} && 47.1 & \textbf{55.1} & \textbf{54.7} & \textbf{34.6} & \textbf{49.0} \\
 \bottomrule
-\end{tabular}
+\end{tabular*}
 \vspace{-1mm}
 \end{table*}
 
-\begin{table*}[!t]
-\caption{Results on Search (Qwen3-4B). All values are validation exact-match accuracy (\%). The search task spans 7 QA benchmarks: 2 in-distribution (HotpotQA, NQ) and 5 out-of-distribution (2Wiki, MuSiQue, TriviaQA, PopQA, Bamboogle). Best results in each column are \textbf{bolded}.}
-\label{tab:search}
+\begin{figure*}[!t]
 \centering
-\footnotesize
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}l c ccccccc@{}}
-\toprule
-Method & Overall & HotpotQA & 2Wiki & MuSiQue & NQ & TriviaQA & PopQA & Bamboogle \\
-\midrule
-Baseline         & 27.4 & 30.3 & 30.7 &  9.3 & 21.3 & 40.7 & 29.4 & 30.4 \\
-BM25             & 32.2 & 37.3 & 32.3 &  8.3 & 25.3 & 47.0 & 39.9 & 35.2 \\
-Contriever       & 32.5 & 34.0 & 35.0 &  7.3 & 27.3 & 49.0 & 37.3 & 37.6 \\
-Qwen3 Emb        & 31.7 & 32.7 & 36.0 &  8.0 & 28.3 & 47.3 & 35.0 & 34.4 \\
-HippoRAG         & 33.2 & 34.0 & 30.7 & 11.3 & 30.0 & 52.3 & 39.9 & 34.4 \\
-MemoRAG          & 27.3 & 29.0 & 31.7 &  9.0 & 18.0 & 42.0 & 29.4 & 32.0 \\
-Self-RAG         & 31.1 & 31.7 & 34.0 &  9.3 & 24.7 & 46.7 & 37.0 & 34.4 \\
-GraphRAG         & 28.0 & 31.7 & 34.7 &  6.3 & 21.0 & 40.0 & 29.0 & 33.6 \\
-Long Context     & 35.5 & 34.0 & 33.3 & 10.0 & 32.0 & 57.0 & 41.3 & 40.8 \\
-\midrule
-GRPO             & 47.8 & 50.9 & 43.3 & 15.5 & 46.6 & \textbf{66.1} & 41.8 & 43.1 \\
-\textbf{\ours}   & \textbf{49.1} & \textbf{53.2} & \textbf{49.2} & \textbf{15.8} & \textbf{47.5} & 64.4 & \textbf{49.9} & \textbf{45.1} \\
-\bottomrule
-\end{tabular}
-\vspace{-1mm}
-\end{table*}
+\includegraphics[width=\textwidth]{figures/results_alfworld_search.png}
+\caption{Validation performance during training on ALFWorld (left two) and Search (right two). For each benchmark we show both the overall validation set and the unseen (out-of-distribution) split. \ours~consistently outperforms GRPO and SkillRL across training, with the largest gains on ALFWorld unseen tasks. Shaded regions show the rolling min/max band; curves are smoothed.}
+\label{fig:training_curves}
+\end{figure*}
 
 % TODO: Main results discussion
 
