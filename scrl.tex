@@ -315,6 +315,17 @@ SkillRL          & {--} & {--} && 81.8 & 75.0 & \textbf{83.3} & 68.8 & 72.2 & 80
 
 % TODO: Main results discussion
 
+\subsection{Skill Lifecycle Analysis}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=\textwidth]{figures/search_skill_lifecycle.png}
+\caption{Skill-policy co-evolution on Search (Qwen3-4B). Left: validation EM accuracy for GRPO (no skills) and \ours, with colored bands marking three stages of skill evolution. Right: key skill operations at each stage. Stage~1 builds a search workflow from scratch (\textcolor[HTML]{2E7D32}{+}~add). Stage~2 adds multi-hop reasoning and resolves design conflicts (\textcolor[HTML]{C62828}{$-$}~delete of internalized skills). Stage~3 refines output formatting and calibrates search depth. Skills are proposed, tested, and accepted or rejected automatically by Thompson Sampling within GRPO rollouts.}
+\label{fig:skill_lifecycle}
+\end{figure*}
+
+% TODO: Skill lifecycle discussion
+
 \subsection{Scaling Analysis}
 
 \begin{figure*}[!t]
