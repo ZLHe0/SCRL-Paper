@@ -142,21 +142,21 @@ initialized with uniform priors $\text{Beta}(1, 1)$. At the start of each episod
 \end{equation}
 where $p_{\min} = 0.15$ and $p_{\max} = 0.85$ ensure both versions are always explored. This decision is made once per episode and held constant throughout: all steps within a single rollout use the same version's skill library, with trigger conditions evaluated according to that version's skills.
 
-\rparagraph{Posterior Updates}
-Each episode is fully assigned to one version and uses that version's skill configuration throughout. For an episode with binary outcome $r(\tau) \in \{0, 1\}$:
+\rparagraph{Posterior Updates with Geometric Discounting}
+Each episode is fully assigned to one version and uses that version's skill configuration throughout. Because the policy $\pi_\theta$ evolves during the evaluation window, older episodes reflect stale policies and should carry less weight (see \S\ref{sec:policy_shift}). We adopt a \textit{geometric discount posterior}: at each GRPO step, existing pseudo-counts are shrunk by a factor $w \in (0, 1]$ before incorporating new observations. For an episode with binary outcome $r(\tau) \in \{0, 1\}$ assigned to the new arm ($d{=}1$):
 \begin{equation}
-    \text{If } d{=}1: \quad \alpha_{\text{new}} \leftarrow \alpha_{\text{new}} + r(\tau), \quad \beta_{\text{new}} \leftarrow \beta_{\text{new}} + (1 - r(\tau)).
+    \alpha_{\text{new}} \leftarrow w \cdot \alpha_{\text{new}} + r(\tau), \quad \beta_{\text{new}} \leftarrow w \cdot \beta_{\text{new}} + (1 - r(\tau)).
     \label{eq:beta_update}
 \end{equation}
-The symmetric update applies for the old arm when $d{=}0$. Since the entire skill configuration may differ between versions (through added, modified, or deleted skills), every episode provides a valid comparison signal. The Thompson Sampling allocation naturally adapts over the course of evaluation: as evidence accumulates, the allocation shifts toward the better-performing version, concentrating rollouts where they are most informative while the clamping bounds ensure neither version is fully starved.
+The symmetric update applies for the old arm when $d{=}0$. Setting $w = 1$ recovers the standard (undiscounted) Beta-Binomial update. By induction, data from step $t$ enters the posterior at decision time $T$ with weight $w^{T-t}$: the most recent step contributes at full weight, while the oldest step contributes $w^{T-1}$. The posterior remains a valid Beta distribution (a sum of scaled Beta contributions), so Thompson Sampling applies directly. The Thompson Sampling allocation naturally adapts over the course of evaluation: as evidence accumulates, the allocation shifts toward the better-performing version while the clamping bounds ensure neither version is fully starved.
 
 \rparagraph{Accept/Reject Decision}
-After accumulating sufficient data ($\text{steps} \geq K_{\text{test}}$ and $\text{episodes} \geq N_{\min}$), the evaluation concludes. The proposed version is accepted if the posterior mean of the new arm exceeds that of the old arm:
+After accumulating sufficient data ($\text{steps} \geq K_{\text{test}}$ and $\text{episodes} \geq N_{\min}$), the evaluation concludes. The proposed version is accepted if the discounted posterior mean of the new arm exceeds that of the old arm:
 \begin{equation}
-    \text{accept}(\mathcal{V}_{\text{new}}) = \mathbf{1}\!\left[\frac{\alpha_{\text{new}}}{\alpha_{\text{new}} + \beta_{\text{new}}} > \frac{\alpha_{\text{old}}}{\alpha_{\text{old}} + \beta_{\text{old}}}\right].
+    \text{accept}(\mathcal{V}_{\text{new}}) = \mathbf{1}\!\left[\frac{\alpha_{\text{new}}}{\alpha_{\text{new}} + \beta_{\text{new}}} > \frac{\alpha_{\text{old}}}{\alpha_{\text{old}} + \beta_{\text{old}}}\right],
     \label{eq:accept}
 \end{equation}
-If accepted, all operations in $\mathcal{V}_{\text{new}}$ are applied permanently to the skill bank $\mathcal{S}$; if rejected, the skill bank reverts to $\mathcal{V}_{\text{old}}$. In either case, the evolution pipeline is unblocked for the next creation cycle.
+where $\alpha, \beta$ are now the geometrically discounted pseudo-counts. This ensures the accept/reject decision reflects the skill set's value under the \textit{current} policy, not a mixture of past policies. If accepted, all operations in $\mathcal{V}_{\text{new}}$ are applied permanently to the skill bank $\mathcal{S}$; if rejected, the skill bank reverts to $\mathcal{V}_{\text{old}}$. In either case, the evolution pipeline is unblocked for the next creation cycle.
 
 \rparagraph{Triple-Duty Rollouts}
 A key design property of \ours~is that standard GRPO rollouts simultaneously serve three purposes without any additional computation. The reward signals $\{r_i\}_{i=1}^G$ provide the GRPO advantage for updating $\theta$ via Eq.~(\ref{eq:grpo}) (policy optimization). Trajectories with $r(\tau) < 1$ are added to the failure reservoir $\mathcal{R}$, a bounded FIFO buffer of 200 episodes stratified to maintain a mix of failures and successes for the skill creator pipeline (failure collection). Each episode's outcome under the Thompson-sampled version assignment updates the Beta posteriors via Eq.~(\ref{eq:beta_update}) (bandit evaluation). This triple-duty design means \ours~incurs zero additional rollout cost. The only overhead beyond standard GRPO is periodic LLM calls for the analyzer, version analyst, and version author, amounting to fewer than 30 LLM API calls across a full training run.
@@ -164,65 +164,46 @@ A key design property of \ours~is that standard GRPO rollouts simultaneously ser
 \subsection{Handling Non-Stationarity from an Evolving Policy}
 \label{sec:policy_shift}
 
-The A/B evaluation described above pools episodes across multiple GRPO steps to accumulate sufficient evidence. However, the policy $\pi_\theta$ is updated by GRPO \textit{simultaneously} with the version evaluation. At each training step $t$, the GRPO update modifies $\theta_{t-1} \to \theta_t$, so data collected under $\pi_{\theta_s}$ at step $s < t$ reflects a \textit{stale} policy. Concretely, if the evaluation spans $K_{\text{test}}$ steps, the pooled success rate estimate
+The A/B evaluation described above pools episodes across multiple GRPO steps to accumulate sufficient evidence. However, the policy $\pi_\theta$ is updated by GRPO \textit{simultaneously} with the version evaluation. At each training step $t$, the GRPO update modifies $\theta_{t-1} \to \theta_t$, so data collected under $\pi_{\theta_s}$ at step $s < t$ reflects a \textit{stale} policy. The success rate $\theta_{a,t} = P(\text{success} \mid \text{arm } a, \pi_t)$ is not stationary---it depends on the evolving policy. The standard Beta posterior, which pools all episodes equally, conflates data from $K_{\text{test}}$ different policies and can yield a biased estimate of the \textit{current} success rate $\theta_{a,T}$.
+
+
+\rparagraph{Geometric Discount Posterior}
+Instead of reweighting individual episodes, we address staleness at the level of the Beta pseudo-counts. The geometric discount posterior introduced in Eq.~(\ref{eq:beta_update}) shrinks existing counts by $w \in (0, 1]$ at each step before adding new observations. By induction, the posterior at decision time $T$ takes the unrolled form:
 \begin{equation}
-    \hat{R} = \frac{\sum_{s=1}^{K_{\text{test}}} \sum_{i=1}^{n_s} r(\tau_i^{(s)})}{\sum_{s=1}^{K_{\text{test}}} n_s},
-    \label{eq:pooled_sr}
+    \alpha_T = w^T + \sum_{t=1}^{T} w^{T-t}\, m_t, \qquad \beta_T = w^T + \sum_{t=1}^{T} w^{T-t}\, (n - m_t),
+    \label{eq:unrolled}
 \end{equation}
-where $n_s$ is the number of episodes assigned to a given arm at step $s$, blends data from $K_{\text{test}}$ different policies. What we actually want is an estimate of the success rate under the \textit{current} policy $\pi_{\theta_T}$ at the end of the evaluation window.
+where $m_t$ is the number of successes and $n$ is the number of episodes assigned to this arm at step $t$. Data from step $t$ enters with weight $w^{T-t}$: recent data dominates while older observations fade out. The total pseudo-count $S_T := \alpha_T + \beta_T = 2w^T + nG$, where $G = \sum_{k=0}^{T-1} w^k = (1 - w^T)/(1 - w)$, is deterministic and does not depend on the random outcomes $m_t$.
 
-\rparagraph{Importance-Weighted Correction}
-A natural approach is to reweight each episode by the importance ratio between the current and historical policies. For a trajectory $\tau = (a_0, o_0, \ldots, a_k)$ generated under $\pi_{\theta_s}$, the episode-level importance weight is the product of per-token ratios:
+\rparagraph{Staleness Bias Bound}
+The bias of the discounted posterior mean as an estimator of $\theta_{a,T}$ can be bounded in terms of the cumulative policy divergence. Writing $\delta_t = \theta_{a,t} - \theta_{a,T}$ for the per-step staleness, the staleness at step $t$ satisfies
 \begin{equation}
-    w(\tau; \theta_T, \theta_s) = \prod_{t=0}^{|\tau|} \frac{\pi_{\theta_T}(a_t \mid \tau_{<t})}{\pi_{\theta_s}(a_t \mid \tau_{<t})},
-    \label{eq:episode_iw}
+    |\theta_{a,t} - \theta_{a,T}| \;\leq\; B_t \;:=\; \sum_{s=t}^{T-1} \kappa_s, \qquad \kappa_s = \sqrt{\tfrac{L_s \cdot \mathrm{KL}_s^{\mathrm{avg}}}{2}},
+    \label{eq:staleness_bound}
 \end{equation}
-yielding a corrected estimator $\hat{R}_{\text{IW}} = \frac{1}{N} \sum_i w(\tau_i; \theta_T, \theta_{s_i}) \cdot r(\tau_i)$.
+where $L_s$ is the mean episode length (in tokens) at step $s$ and $\mathrm{KL}_s^{\mathrm{avg}}$ is the step-to-step mean per-token KL divergence. The derivation chains four standard inequalities: (i) the success-rate gap is bounded by total variation between trajectory distributions; (ii) total variation telescopes across training steps; (iii) Pinsker's inequality converts total variation to KL divergence; (iv) trajectory-level KL decomposes into a sum of per-token KL contributions.
 
-In principle, this provides an unbiased estimate. One might consider averaging the per-token ratios within each episode to obtain a step-level weight $\bar{w}_s$, and then using $\bar{w}_s$ to reweight each step's contribution to the pooled success rate:
+The bound in Eq.~(\ref{eq:staleness_bound}) can be computed from standard GRPO training metrics with no additional forward passes. In PPO/GRPO, the logged metric \texttt{ppo\_kl} averages the per-token KL across $M$ mini-batches. Under PPO clipping, the step-to-step KL accumulates as $\mathrm{KL}_s^{\mathrm{avg}} = \frac{2M}{M-1}\,\texttt{ppo\_kl}_s$, giving the per-step staleness increment
 \begin{equation}
-    \hat{R}_{\text{step}} = \frac{\sum_{s=1}^{K_{\text{test}}} \bar{w}_s \cdot \hat{R}_s \cdot n_s}{\sum_{s=1}^{K_{\text{test}}} \bar{w}_s \cdot n_s},
-    \label{eq:step_weighted_sr}
+    \kappa_s = \lambda\,\sqrt{\frac{M\, L_s}{M - 1}\;\texttt{ppo\_kl}_s},
+    \label{eq:kappa_practical}
 \end{equation}
-where $\hat{R}_s$ is the observed success rate at step $s$ and $\bar{w}_s = \frac{1}{n_s} \sum_{i=1}^{n_s} w(\tau_i^{(s)}; \theta_T, \theta_s)$ is the mean importance weight over episodes at step $s$.
+where $\lambda \leq 1$ is a scaling parameter that absorbs the looseness of the Pinsker bound (the theoretical bound uses $\lambda = 1$; in practice $\lambda < 1$ is tighter since the worst case is rarely realized).
 
-\rparagraph{Fundamental Challenge: Collapse of Aggregated Ratios}
-The step-level averaging faces a fundamental obstacle. By construction, the expected importance ratio under the sampling distribution is identically one:
-\begin{equation}
-    \mathbb{E}_{\tau \sim \pi_{\theta_s}}\!\left[\frac{\pi_{\theta_T}(\tau)}{\pi_{\theta_s}(\tau)}\right] = \sum_{\tau} \pi_{\theta_s}(\tau) \cdot \frac{\pi_{\theta_T}(\tau)}{\pi_{\theta_s}(\tau)} = \sum_{\tau} \pi_{\theta_T}(\tau) = 1,
-    \label{eq:ratio_expectation}
-\end{equation}
-regardless of how much the policy has shifted. Consider a discrete action space with three actions $\{A, B, C\}$:
-
-\vspace{1mm}
-\begin{center}
-\footnotesize
-\begin{tabular}{@{}lccccc@{}}
-\toprule
-Scenario & $\pi_{\text{old}}(A,B,C)$ & $\pi_{\text{new}}(A,B,C)$ & Ratios & $\mathbb{E}[\text{ratio}]$ \\
-\midrule
-Barely shifted   & $(0.50, 0.30, 0.20)$ & $(0.51, 0.29, 0.20)$ & $(1.02, 0.97, 1.00)$ & $1.00$ \\
-Dramatically shifted & $(0.50, 0.30, 0.20)$ & $(0.10, 0.10, 0.80)$ & $(0.20, 0.33, 4.00)$ & $1.00$ \\
-\bottomrule
-\end{tabular}
-\end{center}
-\vspace{1mm}
-
-In the dramatic case, most samples from $\pi_{\text{old}}$ yield low ratios, but the rare high-ratio samples exactly compensate---the signal is in the \textit{variance} of the weights, not their mean. This means $\bar{w}_s \to 1$ as $n_s$ grows, and the step-weighted estimator in Eq.~(\ref{eq:step_weighted_sr}) degenerates to the naive pooled estimator in Eq.~(\ref{eq:pooled_sr}).
-
-This stands in contrast to how importance ratios are used in PPO/GRPO, where the ratio $\rho_{i,t} = \pi_\theta(\tau_{i,t} | \tau_{i,<t}) / \pi_{\theta_{\text{old}}}(\tau_{i,t} | \tau_{i,<t})$ is applied \textit{per-token} and multiplied with the per-token advantage $\hat{A}_i$ (Eq.~\ref{eq:grpo}). In that setting, the ratio corrects for each token's probability shift individually and is never averaged---it functions as a per-token correction factor paired at the same granularity as the gradient signal. Our setting requires an \textit{aggregate} scalar weight per step, which is precisely the operation that collapses the ratio's discriminative power.
-
-Furthermore, the episode-level product in Eq.~(\ref{eq:episode_iw}) compounds per-token deviations over hundreds of tokens (multi-turn agent trajectories typically span 30--50 actions $\times$ multiple tokens per action), causing the weights to either explode or collapse to near-zero---a well-known variance problem in sequential importance sampling.
-
-\rparagraph{Open Direction}
-The analysis above suggests that naive importance weighting does not provide a useful step-level staleness correction for the version A/B test. We note that the KL divergence $\text{KL}(\pi_{\theta_s} \| \pi_{\theta_T})$, which uses log-ratios and thus avoids the $\mathbb{E}=1$ cancellation, can serve as a meaningful measure of policy distance. This connects to the broader literature on non-stationary bandits \citep{russo2018tutorial} and discounted Thompson Sampling, where observations are downweighted based on their age or the degree of environmental change. We leave the development of principled staleness-corrected evaluation criteria as an important direction for future work.
+\rparagraph{Choosing the Discount Factor $w^*$}
+The optimal discount factor $w^*$ minimizes the worst-case mean squared error (MSE) of the posterior mean as an estimator of $\theta_{a,T}$, balancing two terms: $\mathrm{MSE}(w) = \mathrm{bias}(w)^2 + \mathrm{variance}(w)$. The bias grows with $w$ (more stale data retained) while the variance shrinks (more data in the posterior). The minimax-optimal $w^*$ is the unique solution of a one-dimensional optimization over $(0, 1]$ that can be solved numerically at $O(T)$ cost per function evaluation. Two limiting regimes provide intuition:
+\begin{itemize}[leftmargin=*]
+    \item \textit{Noise-dominated} (small $n$, mild drift): $w^* \approx 1$. The variance reduction from retaining all data outweighs the small staleness bias. This is our typical regime ($n \approx 4$--$8$ episodes per arm per step), so the discount is mild.
+    \item \textit{Bias-dominated} (large $n$, strong drift): $w^* \ll 1$. Bias dominates and old data should be discounted aggressively.
+\end{itemize}
+The crossover occurs roughly when $4n \cdot B_t^2 \approx 1$, i.e., when the squared staleness bias from old steps becomes comparable to the per-step sampling variance.
 
 \begin{algorithm}[t]
 \begin{footnotesize}
 \caption{\ours: RL-Guided Skill-Policy Co-Evolution}
 \label{alg:scrl}
 \begin{algorithmic}[1]
-    \STATE \textbf{Input}: Policy $\pi_{\theta_0}$, assertion grader $\mathcal{G}$, analyzer $\mathcal{Z}$, version analyst $\mathcal{Z}_v$, version author $\mathcal{O}_v$, steps $T$, evolution freq $K_e$, test steps $K_{\text{test}}$, min episodes $N_{\min}$.
+    \STATE \textbf{Input}: Policy $\pi_{\theta_0}$, assertion grader $\mathcal{G}$, analyzer $\mathcal{Z}$, version analyst $\mathcal{Z}_v$, version author $\mathcal{O}_v$, steps $T$, evolution freq $K_e$, test steps $K_{\text{test}}$, min episodes $N_{\min}$, discount $w$.
     \STATE \textbf{Initialize}: Skill bank $\mathcal{S}_0 {=} \emptyset$, version $\mathcal{V}_{\text{old}} {=} \mathcal{S}_0$, assertions $\mathcal{A}$, reservoir $\mathcal{R} {\leftarrow} \emptyset$, $\text{Beta}(1,1)$ priors.
     \FOR{$t=1, \dots, T$}
         \STATE \textcolor{paleblue}{[\textbf{Phase 1}: GRPO Rollout with Dynamic Skills]}
@@ -232,7 +213,7 @@ The analysis above suggests that naive importance weighting does not provide a u
         \STATE Generate $\{\tau_i\}_{i=1}^G \sim \pi_{\theta_{\text{old}}}(\cdot | q, \mathcal{S}_{\text{active}}; \mathcal{T})$; compute rewards $\{r_i\}$.
         \STATE Update $\theta_t \leftarrow \text{GRPO}(\theta_{t-1}, \{\tau_i\}, \{r_i\})$. \hfill {\color{gray}\textit{// duty 1: policy}}
         \STATE Add failure episodes to $\mathcal{R}$. \hfill {\color{gray}\textit{// duty 2: reservoir}}
-        \STATE Update $\text{Beta}_{\text{new}}$ or $\text{Beta}_{\text{old}}$ with $(d_i, r(\tau_i))$ for each episode. \hfill {\color{gray}\textit{// duty 3: evaluation}}
+        \STATE Discount and update: $(\alpha, \beta) \leftarrow (w\alpha + r, w\beta + (1{-}r))$ for assigned arm. \hfill {\color{gray}\textit{// duty 3: evaluation}}
         \STATE \textcolor{palered}{[\textbf{Phase 2}: Version Evolution Decision]}
         \IF{testing \AND steps $\geq K_{\text{test}}$ \AND episodes $\geq N_{\min}$}
             \STATE Accept $\mathcal{V}_{\text{new}}$ if $\mathbb{E}[\theta_{\text{new}}] > \mathbb{E}[\theta_{\text{old}}]$: set $\mathcal{S} \leftarrow \mathcal{V}_{\text{new}}$; else revert to $\mathcal{V}_{\text{old}}$.
@@ -516,7 +497,5 @@ We introduced \ours, a framework that enables the co-evolution of modular skills
 \label{app:triggers}
 
 % TODO: Detail the specific trigger types (general, beginning, action\_pattern) with examples.
-
-\include{appendix-IW}
 
 \end{document}
