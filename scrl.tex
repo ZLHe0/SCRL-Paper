@@ -98,7 +98,7 @@ The conventional RLVR approach treats any auxiliary guidance, whether instructio
 \label{fig:pipeline}
 \end{figure*}
 
-\subsection{Assertion-Driven Skill Creator Pipeline}
+\subsection{Skill Creator Pipeline}
 \label{sec:skill_creator}
 
 We first define the \textit{skill module} as the atomic unit of guidance in \ours. A skill $S_k = (c_k, \text{trig}_k)$ consists of content $c_k$ (a structured instruction snippet) and a trigger condition $\text{trig}_k$ that determines when the skill activates during a rollout. Trigger conditions are parameterized by type and pattern, allowing the skill optimizer to choose from several activation modes (e.g., every step, only at the beginning, or only when a specific action pattern is observed). The skill bank $\mathcal{S} = \{S_1, \ldots, S_K\}$ collects all active skills. Skills are \textit{modular}: each targets a specific failure mode and activates only when its trigger condition is met, enabling compositional guidance without prompt bloat.
@@ -164,6 +164,7 @@ A key design property of \ours~is that standard GRPO rollouts simultaneously ser
 \subsection{Handling Non-Stationarity from an Evolving Policy}
 \label{sec:policy_shift}
 
+
 The A/B evaluation described above pools episodes across multiple GRPO steps to accumulate sufficient evidence. However, the policy $\pi_\theta$ is updated by GRPO \textit{simultaneously} with the version evaluation. At each training step $t$, the GRPO update modifies $\theta_{t-1} \to \theta_t$, so data collected under $\pi_{\theta_s}$ at step $s < t$ reflects a \textit{stale} policy. The success rate $\theta_{a,t} = P(\text{success} \mid \text{arm } a, \pi_t)$ is not stationary---it depends on the evolving policy. The standard Beta posterior, which pools all episodes equally, conflates data from $K_{\text{test}}$ different policies and can yield a biased estimate of the \textit{current} success rate $\theta_{a,T}$.
 
 
@@ -175,28 +176,24 @@ Instead of reweighting individual episodes, we address staleness at the level of
 \end{equation}
 where $m_t$ is the number of successes and $n$ is the number of episodes assigned to this arm at step $t$. Data from step $t$ enters with weight $w^{T-t}$: recent data dominates while older observations fade out. The total pseudo-count $S_T := \alpha_T + \beta_T = 2w^T + nG$, where $G = \sum_{k=0}^{T-1} w^k = (1 - w^T)/(1 - w)$, is deterministic and does not depend on the random outcomes $m_t$.
 
-\rparagraph{Staleness Bias Bound}
-The bias of the discounted posterior mean as an estimator of $\theta_{a,T}$ can be bounded in terms of the cumulative policy divergence. Writing $\delta_t = \theta_{a,t} - \theta_{a,T}$ for the per-step staleness, the staleness at step $t$ satisfies
+\rparagraph{Bias--Variance Tradeoff and the MSE Objective}
+The discounted posterior mean $\mu_w = \alpha_T / S_T$ is a weighted average of the per-step observed success rates, with normalized weights $\omega_t = w^{T-t}/G$. As an estimator of the \textit{current} success rate $\theta_{a,T}$, its mean squared error decomposes as
 \begin{equation}
-    |\theta_{a,t} - \theta_{a,T}| \;\leq\; B_t \;:=\; \sum_{s=t}^{T-1} \kappa_s, \qquad \kappa_s = \sqrt{\tfrac{L_s \cdot \mathrm{KL}_s^{\mathrm{avg}}}{2}},
+    \mathrm{MSE}(w) = \underbrace{\Big(\textstyle\sum_t \omega_t\, \delta_t\Big)^{\!2}}_{\text{bias}^2} \;+\; \underbrace{\mathrm{Var}[\mu_w]}_{\text{variance}},
+    \label{eq:mse}
+\end{equation}
+where $\delta_t = \theta_{a,t} - \theta_{a,T}$ is the staleness of step $t$'s data. Larger $w$ retains more historical data, reducing variance but increasing bias (more stale episodes contribute). Smaller $w$ discounts old data, reducing bias but increasing variance (fewer effective samples). The optimal $w^*$ balances these two terms. To make this optimization tractable, we need to bound the unknown staleness terms $\delta_t$.
+
+\rparagraph{Staleness Bias Bound}
+The per-step staleness can be bounded in terms of cumulative policy divergence:
+\begin{equation}
+    |\delta_t| = |\theta_{a,t} - \theta_{a,T}| \;\leq\; B_t \;:=\; \sum_{s=t}^{T-1} \kappa_s, \qquad \kappa_s = \sqrt{\tfrac{L_s \cdot \mathrm{KL}_s^{\mathrm{avg}}}{2}},
     \label{eq:staleness_bound}
 \end{equation}
-where $L_s$ is the mean episode length (in tokens) at step $s$ and $\mathrm{KL}_s^{\mathrm{avg}}$ is the step-to-step mean per-token KL divergence. The derivation chains four standard inequalities: (i) the success-rate gap is bounded by total variation between trajectory distributions; (ii) total variation telescopes across training steps; (iii) Pinsker's inequality converts total variation to KL divergence; (iv) trajectory-level KL decomposes into a sum of per-token KL contributions.
+where $L_s$ is the mean episode length (in tokens) at step $s$ and $\mathrm{KL}_s^{\mathrm{avg}}$ is the step-to-step mean per-token KL divergence. The derivation chains four standard inequalities: (i) the success-rate gap is bounded by total variation between trajectory distributions; (ii) total variation telescopes across training steps; (iii) Pinsker's inequality converts total variation to KL divergence; (iv) trajectory-level KL decomposes into a sum of per-token KL contributions. Substituting these bounds into~\eqref{eq:mse} yields an MSE upper bound that depends only on $w$, the staleness increments $\{\kappa_s\}$, and the per-step sample size $n$---all of which are known or observable during training.
 
-The bound in Eq.~(\ref{eq:staleness_bound}) can be computed from standard GRPO training metrics with no additional forward passes. In PPO/GRPO, the logged metric \texttt{ppo\_kl} averages the per-token KL across $M$ mini-batches. Under PPO clipping, the step-to-step KL accumulates as $\mathrm{KL}_s^{\mathrm{avg}} = \frac{2M}{M-1}\,\texttt{ppo\_kl}_s$, giving the per-step staleness increment
-\begin{equation}
-    \kappa_s = \lambda\,\sqrt{\frac{M\, L_s}{M - 1}\;\texttt{ppo\_kl}_s},
-    \label{eq:kappa_practical}
-\end{equation}
-where $\lambda \leq 1$ is a scaling parameter that absorbs the looseness of the Pinsker bound (the theoretical bound uses $\lambda = 1$; in practice $\lambda < 1$ is tighter since the worst case is rarely realized).
+The minimax-optimal discount $w^*$ that minimizes this worst-case MSE is the unique solution of a one-dimensional optimization over $(0, 1]$, computable at $O(T)$ cost. The staleness increments $\kappa_s$ can be obtained directly from standard GRPO training metrics (the logged \texttt{ppo\_kl} values) with no additional forward passes. Details of the $w^*$ computation and the practical $\kappa_s$ formula are provided in Appendix~\ref{app:staleness_details}.
 
-\rparagraph{Choosing the Discount Factor $w^*$}
-The optimal discount factor $w^*$ minimizes the worst-case mean squared error (MSE) of the posterior mean as an estimator of $\theta_{a,T}$, balancing two terms: $\mathrm{MSE}(w) = \mathrm{bias}(w)^2 + \mathrm{variance}(w)$. The bias grows with $w$ (more stale data retained) while the variance shrinks (more data in the posterior). The minimax-optimal $w^*$ is the unique solution of a one-dimensional optimization over $(0, 1]$ that can be solved numerically at $O(T)$ cost per function evaluation. Two limiting regimes provide intuition:
-\begin{itemize}[leftmargin=*]
-    \item \textit{Noise-dominated} (small $n$, mild drift): $w^* \approx 1$. The variance reduction from retaining all data outweighs the small staleness bias. This is our typical regime ($n \approx 4$--$8$ episodes per arm per step), so the discount is mild.
-    \item \textit{Bias-dominated} (large $n$, strong drift): $w^* \ll 1$. Bias dominates and old data should be discounted aggressively.
-\end{itemize}
-The crossover occurs roughly when $4n \cdot B_t^2 \approx 1$, i.e., when the squared staleness bias from old steps becomes comparable to the per-step sampling variance.
 
 \begin{algorithm}[t]
 \begin{footnotesize}
@@ -497,5 +494,37 @@ We introduced \ours, a framework that enables the co-evolution of modular skills
 \label{app:triggers}
 
 % TODO: Detail the specific trigger types (general, beginning, action\_pattern) with examples.
+
+\section{Staleness Correction: Practical Details}
+\label{app:staleness_details}
+
+\subsection{Computing $\kappa_s$ from Logged Metrics}
+
+The staleness increment $\kappa_s$ in Eq.~(\ref{eq:staleness_bound}) requires the step-to-step mean per-token KL divergence $\mathrm{KL}_s^{\mathrm{avg}}$. In PPO/GRPO, the standard training metric \texttt{ppo\_kl} averages the per-token KL across $M$ mini-batches. Each mini-batch's KL reflects one fewer gradient step than has actually occurred (the KL is computed before the gradient update, not after). Under a linear model for KL accumulation justified by PPO clipping, the step-to-step KL is:
+\begin{equation}
+    \mathrm{KL}_s^{\mathrm{avg}} = \frac{2M}{M-1}\,\texttt{ppo\_kl}_s.
+\end{equation}
+Substituting into Eq.~(\ref{eq:staleness_bound}):
+\begin{equation}
+    \kappa_s = \lambda\,\sqrt{\frac{M\, L_s}{M - 1}\;\texttt{ppo\_kl}_s},
+    \label{eq:kappa_practical}
+\end{equation}
+where $L_s$ is the mean episode length (in tokens) at step $s$ and $\lambda \leq 1$ is a scaling parameter that absorbs the looseness of the Pinsker bound (the theoretical bound uses $\lambda = 1$; in practice $\lambda < 1$ is tighter since the worst case is rarely realized). No additional forward passes are needed.
+
+\subsection{Computing the Optimal Discount Factor $w^*$}
+
+Given the staleness bounds $\{B_t\}_{t=1}^T$ from Eq.~(\ref{eq:staleness_bound}) and the per-step sample size $n$, the minimax-optimal discount factor solves:
+\begin{equation}
+    w^* = \arg\min_{w \in (0,1]} \frac{b(w)^2 + v\, H(w)}{G(w)^2},
+\end{equation}
+where $b(w) = \sum_{t=1}^T w^{T-t} B_t$ is the unnormalized weighted bias bound, $v = 1/(4n)$ is the worst-case Bernoulli variance coefficient, $H(w) = \sum_{k=0}^{T-1} w^{2k} = (1 - w^{2T})/(1 - w^2)$, and $G(w) = (1 - w^T)/(1 - w)$. This is a one-dimensional optimization that can be solved via golden-section search or grid evaluation (e.g., 100 points on $[0.01, 1]$) at $O(T)$ cost per function evaluation.
+
+Two limiting regimes provide intuition:
+\begin{itemize}[leftmargin=*]
+    \item \textit{Noise-dominated} (small $n$, mild drift): $w^* \approx 1$. The variance reduction from retaining all data outweighs the small staleness bias. This is our typical regime ($n \approx 4$--$8$ episodes per arm per step), so the discount is mild.
+    \item \textit{Bias-dominated} (large $n$, strong drift): $w^* \ll 1$. Bias dominates and old data should be discounted aggressively.
+\end{itemize}
+The crossover occurs roughly when $4n \cdot B_t^2 \approx 1$, i.e., when the squared staleness bias from old steps becomes comparable to the per-step sampling variance.
+
 
 \end{document}
