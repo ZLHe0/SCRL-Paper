@@ -260,29 +260,41 @@ We build on the VeRL framework \citep{sheng2025hybridflow} with Ray-based distri
 \small
 \setlength{\tabcolsep}{0pt}
 \textbf{ALFWorld} — Task types: Pick\&Place (P\&P), Transform (Trans.\ = avg of heat, cool, clean), Examine (Exam.)\\[2pt]
-\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}l cccc c cccc c@{}}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}ll cccc c cccc c@{}}
 \toprule
-& \multicolumn{4}{c}{Seen} && \multicolumn{4}{c}{Unseen} & \\
-\cmidrule(lr){2-5} \cmidrule(lr){7-10}
-Method & P\&P & Trans. & Exam. & Avg && P\&P & Trans. & Exam. & Avg & Overall \\
+& & \multicolumn{4}{c}{Seen} && \multicolumn{4}{c}{Unseen} & \\
+\cmidrule(lr){3-6} \cmidrule(lr){8-11}
+& Method & P\&P & Trans. & Exam. & Avg && P\&P & Trans. & Exam. & Avg & Overall \\
 \midrule
-GRPO & 93.1\tpm{1.2} & 62.5\tpm{5.7} & \textbf{92.3}\tpm{0.0} & 78.6\tpm{3.3} && 84.2\tpm{5.2} & 72.6\tpm{2.7} & 94.4\tpm{9.6} & 78.9\tpm{1.9} & 78.7\tpm{2.6} \\
-SkillRL & 88.2\tpm{0.0} & 85.9\tpm{0.0} & 61.5\tpm{0.0} & 85.7\tpm{0.0} && 68.7\tpm{7.5} & 78.4\tpm{0.8} & 94.4\tpm{5.6} & 77.1\tpm{2.8} & 81.5\tpm{1.4} \\
-\textbf{\ours} & \textbf{97.9}\tpm{0.0} & \textbf{88.5}\tpm{0.0} & \textbf{92.3}\tpm{0.0} & \textbf{93.6}\tpm{0.0} && \textbf{93.0}\tpm{3.4} & \textbf{93.1}\tpm{4.2} & \textbf{98.1}\tpm{3.2} & \textbf{93.5}\tpm{1.1} & \textbf{93.6}\tpm{0.6} \\
+\textit{Baseline} & Zero-shot & 54.7\tpm{0.0} & 28.1\tpm{0.0} & 28.6\tpm{0.0} & 37.1\tpm{0.0} && 30.8\tpm{0.0} & 28.9\tpm{0.0} & 66.7\tpm{0.0} & 32.8\tpm{0.0} & 35.0\tpm{0.0} \\
+\midrule
+\multirow{3}{*}{\textit{w/ Skill}} & BM25 & 46.9\tpm{0.0} & 20.9\tpm{0.0} & 50.0\tpm{0.0} & 35.0\tpm{0.0} && 23.1\tpm{0.0} & 28.9\tpm{0.0} & 66.7\tpm{0.0} & 31.3\tpm{0.0} & 33.2\tpm{0.0} \\
+& HippoRAG & 43.8\tpm{0.0} & 18.5\tpm{0.0} & 64.3\tpm{0.0} & 34.3\tpm{0.0} && 21.2\tpm{0.0} & 43.8\tpm{0.0} & 83.3\tpm{0.0} & 38.1\tpm{0.0} & 36.1\tpm{0.0} \\
+& Long Context & 62.5\tpm{0.0} & 48.9\tpm{0.0} & 50.0\tpm{0.0} & 54.3\tpm{0.0} && 28.8\tpm{0.0} & 67.0\tpm{0.0} & 66.7\tpm{0.0} & 51.5\tpm{0.0} & 52.9\tpm{0.0} \\
+\midrule
+\multirow{3}{*}{\textit{w/ RL}} & GRPO & 93.1\tpm{1.2} & 62.5\tpm{5.7} & \textbf{92.3}\tpm{0.0} & 78.6\tpm{3.3} && 84.2\tpm{5.2} & 72.6\tpm{2.7} & 94.4\tpm{9.6} & 78.9\tpm{1.9} & 78.7\tpm{2.6} \\
+& SkillRL & 88.2\tpm{0.0} & 85.9\tpm{0.0} & 61.5\tpm{0.0} & 85.7\tpm{0.0} && 68.7\tpm{7.5} & 78.4\tpm{0.8} & 94.4\tpm{5.6} & 77.1\tpm{2.8} & 81.5\tpm{1.4} \\
+& \textbf{\ours} & \textbf{97.9}\tpm{0.0} & \textbf{88.5}\tpm{0.0} & \textbf{92.3}\tpm{0.0} & \textbf{93.6}\tpm{0.0} && \textbf{93.0}\tpm{3.4} & \textbf{93.1}\tpm{4.2} & \textbf{98.1}\tpm{3.2} & \textbf{93.5}\tpm{1.1} & \textbf{93.6}\tpm{0.6} \\
 \bottomrule
 \end{tabular*}
 \vspace{4pt}
 
 \textbf{Search} — Grouped by hop count: single-hop (SH) and multi-hop (MH)\\[2pt]
-\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}l ccc c ccc c@{}}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}ll ccc c ccc c@{}}
 \toprule
-& \multicolumn{3}{c}{Seen} && \multicolumn{3}{c}{Unseen} & \\
-\cmidrule(lr){2-4} \cmidrule(lr){6-8}
-Method & SH & MH & Avg && SH & MH & Avg & Overall \\
+& & \multicolumn{3}{c}{Seen} && \multicolumn{3}{c}{Unseen} & \\
+\cmidrule(lr){3-5} \cmidrule(lr){7-9}
+& Method & SH & MH & Avg && SH & MH & Avg & Overall \\
 \midrule
-GRPO & 48.0\tpm{0.0} & 52.4\tpm{1.2} & 50.2\tpm{0.6} && 54.7\tpm{0.0} & 31.4\tpm{0.8} & 42.0\tpm{0.5} & 44.6\tpm{0.3} \\
-SkillRL & \textbf{50.7}\tpm{0.0} & 52.0\tpm{0.0} & 51.3\tpm{0.0} && 55.7\tpm{0.0} & 35.1\tpm{0.6} & 44.5\tpm{0.3} & 46.6\tpm{0.2} \\
-\textbf{\ours} & 49.6\tpm{0.8} & \textbf{55.3}\tpm{0.6} & \textbf{52.4}\tpm{0.1} && \textbf{56.6}\tpm{0.2} & \textbf{37.8}\tpm{0.0} & \textbf{46.3}\tpm{0.1} & \textbf{48.2}\tpm{0.1} \\
+\textit{Baseline} & Zero-shot & 19.3\tpm{0.0} & 28.7\tpm{0.0} & 24.0\tpm{0.0} && 34.3\tpm{0.0} & 23.7\tpm{0.0} & 28.5\tpm{0.0} & 27.1\tpm{0.0} \\
+\midrule
+\multirow{3}{*}{\textit{w/ Skill}} & BM25 & 25.3\tpm{0.0} & 35.0\tpm{0.0} & 30.2\tpm{0.0} && 44.3\tpm{0.0} & 23.7\tpm{0.0} & 33.1\tpm{0.0} & 32.2\tpm{0.0} \\
+& HippoRAG & 30.7\tpm{0.0} & 36.3\tpm{0.0} & 33.5\tpm{0.0} && 46.6\tpm{0.0} & 22.2\tpm{0.0} & 33.3\tpm{0.0} & 33.4\tpm{0.0} \\
+& Long Context & 31.7\tpm{0.0} & 34.0\tpm{0.0} & 32.8\tpm{0.0} && 47.8\tpm{0.0} & 24.4\tpm{0.0} & 35.0\tpm{0.0} & 34.3\tpm{0.0} \\
+\midrule
+\multirow{3}{*}{\textit{w/ RL}} & GRPO & 48.0\tpm{0.0} & 52.4\tpm{1.2} & 50.2\tpm{0.6} && 54.7\tpm{0.0} & 31.4\tpm{0.8} & 42.0\tpm{0.5} & 44.6\tpm{0.3} \\
+& SkillRL & \textbf{50.7}\tpm{0.0} & 52.0\tpm{0.0} & 51.3\tpm{0.0} && 55.7\tpm{0.0} & 35.1\tpm{0.6} & 44.5\tpm{0.3} & 46.6\tpm{0.2} \\
+& \textbf{\ours} & 49.6\tpm{0.8} & \textbf{55.3}\tpm{0.6} & \textbf{52.4}\tpm{0.1} && \textbf{56.6}\tpm{0.2} & \textbf{37.8}\tpm{0.0} & \textbf{46.3}\tpm{0.1} & \textbf{48.2}\tpm{0.1} \\
 \bottomrule
 \end{tabular*}
 \vspace{-1mm}
