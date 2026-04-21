@@ -25,6 +25,8 @@
 \newtheorem{lemma}[theorem]{Lemma}
 \theoremstyle{definition}
 \newtheorem{definition}[theorem]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
 
 \input{commands}
 
@@ -63,10 +65,8 @@ We validate \ours~through extensive experiments on three diverse agentic benchma
 \section{Preliminaries}
 %=============================================================================
 
-\subsection{Reinforcement Learning with Tool-Using}
-We formalize multi-turn tool-using as a Markov Decision Process (MDP) \citep{hauskrecht2013hierarchical}, where the LLM-based agent, governed by its policy $\pi$ and parameterized by the weights $\theta$, interacts with an external environment by calling a tool engine $\mathcal{T}$. It generates a trajectory $\tau$ as its state that comprises multiple turns of interactions: $\tau=(q, \mathcal{S}_{\text{active}}, a_{0},o_{0},\dots,a_{k-1},o_{k-1},a_{k})$, where $q$ is the task input and $\mathcal{S}_{\text{active}} \subseteq \mathcal{S}$ denotes the set of active skills injected into the prompt. $a_k$ is the response from the LLM given the history trajectory up to turn $k$, such that $a \sim \pi_{\theta}(\cdot | q, \mathcal{S}_{\text{active}};\mathcal{T})$. The observation $o$ is the feedback from the environment by calling the tool engine, $o_k=\mathcal{T}(a_k)$, which is concatenated in an interleaved manner with the action.
-
-The learning objective of RL is to optimize the policy parameters $\theta$ by maximizing the expected returns over a distribution of tasks $\mathcal{D}$, where $r(\tau)$ defines the reward function. In RLVR, the reward is typically defined via a rule-based verifier, such as an exact match or task-completion reward $r(\tau)\in\{0, 1\}$. The learning objective is:
+\subsection{Multi-Turn Agentic RL}
+We consider an LLM-based agent with policy $\pi_\theta$ that interacts with an environment over multiple turns via a tool engine $\mathcal{T}$. Given a task $q \sim \mathcal{D}$ and a set of active skills $\mathcal{S}_{\text{active}} \subseteq \mathcal{S}$ injected into the prompt, the agent generates a trajectory $\tau$ of interleaved actions and observations. The learning objective is to maximize the expected reward under a rule-based verifier $r(\tau) \in \{0, 1\}$:
 \begin{equation}
     \max_{\pi_\theta} \mathbb{E}_{q \sim \mathcal{D},\, \tau \sim \pi_\theta(\cdot|q, \mathcal{S}_{\text{active}};\mathcal{T})} \left[ r(\tau)
     \right].
@@ -81,7 +81,7 @@ Group Relative Policy Optimization (GRPO) \citep{shao2024deepseekmath} is a poli
 \end{aligned}
 \label{eq:grpo}
 \end{equation}
-where $\rho_{i,t}(\theta) = {\pi_\theta(\tau_{i,t}|\tau_{i,<t})}/{\pi_{\theta_{\text{old}}}(\tau_{i,t}|\tau_{i,<t})}$ is the token-level importance ratio, $\hat{A}_i = ({r_i - \text{mean}(\{r_j\}_{j=1}^{G})})/{\text{std}(\{r_j\}_{j=1}^{G})}$ is the group-normalized advantage, $\epsilon$ is the clip ratio, and $\beta$ controls the KL divergence penalty $\mathbb{D}_{\text{KL}}(\pi_\theta \| \pi_{\text{ref}})$ with respect to the reference policy. The indicator function $\mathcal{I}_{i,t}$ masks out observation tokens $o$ so that policy gradients are computed only over the agent's own action tokens $a$ \citep{jin2025search, xue2025simpletir}.
+where $\rho_{i,t}(\theta) = {\pi_\theta(\tau_{i,t}|\tau_{i,<t})}/{\pi_{\theta_{\text{old}}}(\tau_{i,t}|\tau_{i,<t})}$ is the token-level importance ratio, $\hat{A}_i = ({r_i - \text{mean}(\{r_j\}_{j=1}^{G})})/{\text{std}(\{r_j\}_{j=1}^{G})}$ is the group-normalized advantage, $\epsilon$ is the clip ratio, and $\beta$ controls the KL divergence penalty $\mathbb{D}_{\text{KL}}(\pi_\theta \| \pi_{\text{ref}})$ with respect to the reference policy. The indicator $\mathcal{I}_{i,t}$ masks out environment observation tokens so that gradients are computed only over the agent's own tokens \citep{jin2025search, xue2025simpletir}.
 
 
 %=============================================================================
@@ -89,7 +89,7 @@ where $\rho_{i,t}(\theta) = {\pi_\theta(\tau_{i,t}|\tau_{i,<t})}/{\pi_{\theta_{\
 \label{sec:method}
 %=============================================================================
 
-The conventional RLVR approach treats any auxiliary guidance, whether instructions \citep{zhou2025inspo} or skills \citep{xia2025skillrl}, as a static, pre-defined input. This constrains the agent's exploration and may result in suboptimal convergence, as the ideal guidance changes with the evolving policy. \ours~re-frames skill design as a \textit{dynamic} and \textit{integral} component of the RL loop, enabling skills and policy to co-evolve in an online setting. The core of \ours~is composed of two synergistic components: an assertion-driven pipeline that creates skill library \textit{versions}---bundles of add, modify, and delete operations---from failure analysis (\S\ref{sec:skill_creator}), and an RL-guided evolution mechanism that tests each proposed version against the current one via Thompson Sampling within GRPO rollouts (\S\ref{sec:skill_evolution}).
+The conventional RLVR approach treats any auxiliary guidance, whether instructions \citep{zhou2025inspo} or skills \citep{xia2025skillrl}, as a static, pre-defined input. This constrains the agent's exploration and may result in suboptimal convergence, as the ideal guidance changes with the evolving policy. \ours~re-frames skill design as a \textit{dynamic} and \textit{integral} component of the RL loop, enabling skills and policy to co-evolve online without any additional rollouts. The key observation is that standard GRPO rollouts already provide all the signal needed: we describe this \textit{triple-duty} design in \S\ref{sec:design}, then detail the two components it connects---the skill creator pipeline (\S\ref{sec:skill_creator}) and the Thompson Sampling-based skill evolution mechanism (\S\ref{sec:skill_evolution}).
 
 \begin{figure*}[!t]
 \centering
@@ -97,6 +97,13 @@ The conventional RLVR approach treats any auxiliary guidance, whether instructio
 \caption{The \ours~pipeline. \textbf{Left}: Policy optimization with interleaved skill testing via Thompson Sampling. Each proposed skill is stochastically included or excluded at the trigger point, and the RL reward signal determines whether the skill is accepted or pruned. \textbf{Right}: Skill creation from failure trajectories. An assertion grader diagnoses failures quantitatively, an LLM-based analyzer identifies patterns, and a skill optimizer proposes modular, trigger-based skills.}
 \label{fig:pipeline}
 \end{figure*}
+
+\subsection{Triple-Duty Rollouts: Connecting Skill Creation and Evolution}
+\label{sec:design}
+
+Recall that each GRPO step samples a group of $G$ rollouts from the same task $q$ under the current policy $\pi_{\theta}$. A key observation is that rollouts within the same group share the same task input and policy, differing only in their stochastic trajectories---this provides a natural, controlled setting for comparing two skill configurations. Rather than splitting across \textit{tasks} (which introduces high variance when the number of episodes is small, as is typical in multi-turn agentic RL, e.g., $G = 16$), we split across \textit{rollouts within each group}: some rollouts use the candidate skill version $\mathcal{V}_{\text{new}}$ while others use the current version $\mathcal{V}_{\text{old}}$, with the allocation determined by Thompson Sampling (\S\ref{sec:skill_evolution}). This within-group split provides a fairly controlled comparison where the only difference is the skill configuration.
+
+Building on this, we design each GRPO rollout to simultaneously serve three purposes: (i)~\textbf{policy optimization}---the reward signals provide the GRPO advantage for updating $\theta$ via Eq.~(\ref{eq:grpo}), which remains the primary purpose of the rollout; (ii)~\textbf{failure collection}---trajectories with $r(\tau) < 1$ are added to a bounded reservoir $\mathcal{R}$, providing the raw material for the skill creator pipeline (\S\ref{sec:skill_creator}); and (iii)~\textbf{skill evaluation}---each rollout's outcome under its assigned skill version updates the Thompson Sampling posteriors for accepting or rejecting the candidate version (\S\ref{sec:skill_evolution}). The skill creation and evolution thus operate entirely within the existing GRPO training loop, with the only additional cost being periodic LLM calls for the skill creator (fewer than 30 API calls across a full training run).
 
 \subsection{Skill Creator Pipeline}
 \label{sec:skill_creator}
@@ -106,93 +113,59 @@ We first define the \textit{skill module} as the atomic unit of guidance in \our
 The skill creator pipeline adapts the Skill Creator paradigm, originally designed for human-in-the-loop development, for automated use within RL training. The input is failed GRPO rollouts collected over time into a bounded failure reservoir $\mathcal{R}$. The pipeline operates in three stages, triggered periodically (every $K_e$ GRPO steps) when the system is not already testing a candidate skill.
 
 \rparagraph{Assertion Grading and Analysis}
-The assertion grader $\mathcal{G}$ maintains a dynamic set of rule-based assertions $\mathcal{A} = \{a_j\}_{j=1}^M$, where each assertion $a_j = (\text{check}_j, \text{params}_j)$ is a predicate over trajectories (e.g., \texttt{action\_exists}, \texttt{action\_before}, \texttt{final\_action}). Given the failure reservoir $\mathcal{R}$, the grader evaluates every trajectory against all assertions, producing per-assertion pass rates $p_j = |\mathcal{R}|^{-1} \sum_{\tau \in \mathcal{R}} \mathbf{1}[\text{check}_j(\tau, \text{params}_j)]$ that quantify the prevalence of specific behavioral patterns. The grader is entirely rule-based with no LLM calls.
+The assertion grader $\mathcal{G}$ maintains a dynamic set of rule-based assertions $\mathcal{A} = \{\phi_j\}$, where each assertion $\phi_j = (\text{check}_j, \text{params}_j)$ is a predicate over trajectories (e.g., \texttt{action\_exists}, \texttt{action\_before}, \texttt{final\_action}). Given the failure reservoir $\mathcal{R}$, the grader evaluates every trajectory against all assertions, producing per-assertion pass rates $\hat{r}_j = |\mathcal{R}|^{-1} \sum_{\tau \in \mathcal{R}} \mathbf{1}[\text{check}_j(\tau, \text{params}_j)]$ that quantify the prevalence of specific behavioral patterns. The grader is entirely rule-based with no LLM calls.
 
 An LLM-based assertion analyzer $\mathcal{Z}$ then receives the pass rates, a stratified sample of trajectories from $\mathcal{R}$, and a summary of the current skill bank $\mathcal{S}$. The analyzer \textit{evolves the assertion set} $\mathcal{A}$ via operations (add, delete, modify), adapting the diagnostic criteria to the current policy's failure landscape. It also produces a \textit{failure diagnosis} $\mathcal{F}_{\text{diag}}$ with prevalence-ranked patterns and selects representative episodes $\mathcal{E}_{\text{sel}}$ for the skill optimizer.
 
 \rparagraph{Skill Version Creation}
 Rather than proposing a single skill in isolation, the creation pipeline generates a new \textit{version} of the skill library through a two-step analyst--author process. An LLM-based \textit{version analyst} $\mathcal{Z}_v$ receives the failure diagnosis $\mathcal{F}_{\text{diag}}$, the selected episodes $\mathcal{E}_{\text{sel}}$, the current skill bank $\mathcal{S}$, the history of previous version proposals and their accept/reject outcomes, and action-pattern frequency statistics from recent rollouts. It produces a \textit{change plan} $\mathcal{P}$: a set of 1--3 operations, each of type \textsc{add} (introduce a new skill), \textsc{modify} (refine an existing skill's content or trigger), or \textsc{delete} (remove an obsolete or harmful skill). The analyst prioritizes unaddressed failure patterns for additions, refines skills whose guidance contradicts successful behavior for modifications, and removes skills that the policy has internalized or that conflict with current performance for deletions. The total number of active skills is capped at $K_{\max}$ after all operations.
 
-An LLM-based \textit{version author} $\mathcal{O}_v$ then executes the change plan $\mathcal{P}$, writing concrete skill content, trigger conditions, and grounded examples for each operation. For any \textsc{add} operation, the proposed skill must pass a \textit{trigger rate gate}: $\hat{p}_{\text{trigger}} \geq \delta$ (default $\delta = 0.1$), ensuring testability within a reasonable number of episodes. The resulting set of operations defines a candidate version $\mathcal{V}_{\text{new}}$ of the skill library, which enters Thompson Sampling evaluation against the current version $\mathcal{V}_{\text{old}}$.
+An LLM-based \textit{version author} $\mathcal{O}_v$ then executes the change plan $\mathcal{P}$, writing concrete skill content, trigger conditions, and grounded examples for each operation. For any \textsc{add} operation, the proposed skill must pass a \textit{trigger rate gate}: $\hat{p}_{\text{trigger}} \geq \delta$ (default $\delta = 0.1$), ensuring testability within a reasonable number of episodes. The resulting set of operations defines a candidate version $\mathcal{V}_{\text{new}}$ of the skill library.
+
+\rparagraph{Trigger-Based Skill Injection}
+At each step $t$ of a multi-turn episode, the trigger matcher determines which skills from the active version are injected into the prompt. Each skill's trigger condition $\text{trig}_k$ is a predicate over the current step index and the previous action:
+\begin{equation}
+    \mathcal{S}_{\text{active}}^{(t)} = \{S_k \in \mathcal{S} : \text{trig}_k(t, a_{t-1}) = 1\}.
+    \label{eq:trigger}
+\end{equation}
+This per-step trigger mechanism allows different skills to activate at different moments within a single episode, providing targeted guidance without inflating every prompt. The specific trigger types and their semantics are detailed in Appendix~\ref{app:triggers}.
 
 
 \subsection{RL-Guided Skill Evolution with Thompson Sampling}
 \label{sec:skill_evolution}
 
-Rather than relying on a human judge or external validation, \ours~uses the RL training signal itself to evolve the skill library. Inspired by instruction-policy co-evolution \citep{zhou2025inspo}, the evolution mechanism integrates version evaluation directly into GRPO rollouts through trigger-based injection and Thompson Sampling \citep{thompson1933likelihood, russo2018tutorial}.
+As described in \S\ref{sec:design}, rollouts within each GRPO group are split between the candidate version $\mathcal{V}_{\text{new}}$ and the current version $\mathcal{V}_{\text{old}}$. The skill evolution operates in \textit{cycles} of $K_e$ training steps: at the start of each cycle, the creator pipeline (\S\ref{sec:skill_creator}) proposes a candidate version; the within-group split then evaluates it over $K_e$ steps; at the end of the cycle, the version is accepted or rejected, and the next cycle begins immediately.
 
-\rparagraph{Trigger-Based Skill Injection}
-At each step $t$ of a multi-turn episode, the trigger matcher determines which skills are injected into the prompt. Each skill's trigger condition $\text{trig}_k$ is a predicate over the current step index and the previous action, allowing the skill optimizer to specify diverse activation patterns:
-\begin{equation}
-    \mathcal{S}_{\text{active}}^{(t)} = \{S_k \in \mathcal{S} : \text{trig}_k(t, a_{t-1}) = 1 \wedge \text{status}(S_k) \neq \text{excluded}\},
-    \label{eq:trigger}
-\end{equation}
-where the status of skills under test is determined by the Thompson Sampling mechanism described below. This per-step trigger mechanism allows different skills to activate at different moments within a single episode, providing targeted guidance without inflating every prompt. The specific trigger types and their semantics are detailed in Appendix~\ref{app:triggers}.
+The within-group allocation is a two-armed bandit problem: we must balance \textit{evaluating} which version is better against \textit{exploiting} the currently-favored version for better training outcomes. Thompson Sampling \citep{thompson1933likelihood, russo2018tutorial} achieves both naturally---it allocates more rollouts to the version that appears better (improving training efficiency) while maintaining stochastic exploration of the alternative (gathering evidence for the accept/reject decision).
 
-\rparagraph{Thompson Sampling for Version Evaluation}
-When a candidate version $\mathcal{V}_{\text{new}}$ is produced by the creator pipeline, it enters a \textit{bandit evaluation} phase embedded within GRPO rollouts. The key question is whether the proposed version improves episode outcomes over the current version $\mathcal{V}_{\text{old}}$. We frame this as a two-armed bandit problem: the \textit{new} arm uses $\mathcal{V}_{\text{new}}$ as the active skill library, and the \textit{old} arm retains $\mathcal{V}_{\text{old}}$. Each arm maintains a Beta-Binomial posterior:
+\rparagraph{Version Assignment}
+Each arm maintains a Beta posterior over its success probability, initialized with uniform priors $\text{Beta}(1, 1)$:
 \begin{equation}
-    \theta_{\text{new}} \sim \text{Beta}(\alpha_{\text{new}}, \beta_{\text{new}}), \quad \theta_{\text{old}} \sim \text{Beta}(\alpha_{\text{old}}, \beta_{\text{old}}),
+    p_{\text{new}} \sim \text{Beta}(\alpha_{\text{new}}, \beta_{\text{new}}), \quad p_{\text{old}} \sim \text{Beta}(\alpha_{\text{old}}, \beta_{\text{old}}).
     \label{eq:thompson_posteriors}
 \end{equation}
-initialized with uniform priors $\text{Beta}(1, 1)$. At the start of each episode, the version assignment is sampled via Thompson Sampling:
+At the start of each episode, the version assignment is sampled via Thompson Sampling:
 \begin{equation}
-    d = \mathbf{1}[\theta_{\text{new}} > \theta_{\text{old}}], \quad \text{with } \Pr(\text{new}) = \text{clamp}\!\left(\Pr(\theta_{\text{new}} > \theta_{\text{old}}),\, p_{\min},\, p_{\max}\right),
+    d = \mathbf{1}[p_{\text{new}} > p_{\text{old}}], \quad \text{with } \Pr(\text{new}) = \text{clamp}\!\left(\Pr(p_{\text{new}} > p_{\text{old}}),\, \varepsilon_{\text{ts}},\, 1{-}\varepsilon_{\text{ts}}\right),
     \label{eq:thompson_decision}
 \end{equation}
-where $p_{\min} = 0.15$ and $p_{\max} = 0.85$ ensure both versions are always explored. This decision is made once per episode and held constant throughout: all steps within a single rollout use the same version's skill library, with trigger conditions evaluated according to that version's skills.
+where $\varepsilon_{\text{ts}} = 0.2$ ensures sufficient exploration of both versions~\citep{russo2018tutorial}. All steps within a single rollout use the assigned version's skill library.
 
-\rparagraph{Posterior Updates with Geometric Discounting}
-Each episode is fully assigned to one version and uses that version's skill configuration throughout. Because the policy $\pi_\theta$ evolves during the evaluation window, older episodes reflect stale policies and should carry less weight (see \S\ref{sec:policy_shift}). We adopt a \textit{geometric discount posterior}: at each GRPO step, existing pseudo-counts are shrunk by a factor $w \in (0, 1]$ before incorporating new observations. For an episode with binary outcome $r(\tau) \in \{0, 1\}$ assigned to the new arm ($d{=}1$):
+\rparagraph{Adaptive Discount Posterior}
+Unlike classical bandit settings where arm rewards are stationary, the policy $\pi_\theta$ evolves during each evaluation cycle: the arm success probability $p_{a,t} = P(\text{success} \mid \text{arm } a, \pi_{\theta_t})$ changes with each GRPO update. The standard Beta posterior, which pools all episodes equally, conflates data from multiple policies and introduces staleness bias. We address this with a \textit{sample-size-adaptive discount}: at each step~$t$, existing pseudo-counts are shrunk before incorporating the $m_t$ successes out of $n_t$ episodes assigned to each arm:
 \begin{equation}
-    \alpha_{\text{new}} \leftarrow w \cdot \alpha_{\text{new}} + r(\tau), \quad \beta_{\text{new}} \leftarrow w \cdot \beta_{\text{new}} + (1 - r(\tau)).
+    \alpha \leftarrow w_t \cdot \alpha + m_t, \quad \beta \leftarrow w_t \cdot \beta + (n_t - m_t), \qquad w_t = \frac{1}{1 + n_t/M},
     \label{eq:beta_update}
 \end{equation}
-The symmetric update applies for the old arm when $d{=}0$. Setting $w = 1$ recovers the standard (undiscounted) Beta-Binomial update. By induction, data from step $t$ enters the posterior at decision time $T$ with weight $w^{T-t}$: the most recent step contributes at full weight, while the oldest step contributes $w^{T-1}$. The posterior remains a valid Beta distribution (a sum of scaled Beta contributions), so Thompson Sampling applies directly. The Thompson Sampling allocation naturally adapts over the course of evaluation: as evidence accumulates, the allocation shifts toward the better-performing version while the clamping bounds ensure neither version is fully starved.
+where $M > 0$ is a scalar \emph{memory parameter}. Written as $w_t = 1/(1 + n_t/M)$, the discount interpolates smoothly between full retention ($w_t \to 1$ when $n_t \ll M$) and aggressive forgetting ($w_t \to 0$ when $n_t \gg M$), with the crossover at $n_t = M$ ($w_t = 1/2$). The posterior remains a valid Beta distribution with this multiplicative discount, so Thompson Sampling applies directly. We estimate $M$ from data via sequential predictive-likelihood maximization on completed evaluation cycles (Appendix~\ref{app:staleness_details}), requiring no manual tuning.
 
 \rparagraph{Accept/Reject Decision}
-After accumulating sufficient data ($\text{steps} \geq K_{\text{test}}$ and $\text{episodes} \geq N_{\min}$), the evaluation concludes. The proposed version is accepted if the discounted posterior mean of the new arm exceeds that of the old arm:
+At the end of each cycle, the proposed version is accepted if the adaptively-discounted posterior mean of the new arm exceeds that of the old arm:
 \begin{equation}
     \text{accept}(\mathcal{V}_{\text{new}}) = \mathbf{1}\!\left[\frac{\alpha_{\text{new}}}{\alpha_{\text{new}} + \beta_{\text{new}}} > \frac{\alpha_{\text{old}}}{\alpha_{\text{old}} + \beta_{\text{old}}}\right],
     \label{eq:accept}
 \end{equation}
-where $\alpha, \beta$ are now the geometrically discounted pseudo-counts. This ensures the accept/reject decision reflects the skill set's value under the \textit{current} policy, not a mixture of past policies. If accepted, all operations in $\mathcal{V}_{\text{new}}$ are applied permanently to the skill bank $\mathcal{S}$; if rejected, the skill bank reverts to $\mathcal{V}_{\text{old}}$. In either case, the evolution pipeline is unblocked for the next creation cycle.
-
-\rparagraph{Triple-Duty Rollouts}
-A key design property of \ours~is that standard GRPO rollouts simultaneously serve three purposes without any additional computation. The reward signals $\{r_i\}_{i=1}^G$ provide the GRPO advantage for updating $\theta$ via Eq.~(\ref{eq:grpo}) (policy optimization). Trajectories with $r(\tau) < 1$ are added to the failure reservoir $\mathcal{R}$, a bounded FIFO buffer of 200 episodes stratified to maintain a mix of failures and successes for the skill creator pipeline (failure collection). Each episode's outcome under the Thompson-sampled version assignment updates the Beta posteriors via Eq.~(\ref{eq:beta_update}) (bandit evaluation). This triple-duty design means \ours~incurs zero additional rollout cost. The only overhead beyond standard GRPO is periodic LLM calls for the analyzer, version analyst, and version author, amounting to fewer than 30 LLM API calls across a full training run.
-
-\subsection{Handling Non-Stationarity from an Evolving Policy}
-\label{sec:policy_shift}
-
-
-The A/B evaluation described above pools episodes across multiple GRPO steps to accumulate sufficient evidence. However, the policy $\pi_\theta$ is updated by GRPO \textit{simultaneously} with the version evaluation. At each training step $t$, the GRPO update modifies $\theta_{t-1} \to \theta_t$, so data collected under $\pi_{\theta_s}$ at step $s < t$ reflects a \textit{stale} policy. The success rate $\theta_{a,t} = P(\text{success} \mid \text{arm } a, \pi_t)$ is not stationary---it depends on the evolving policy. The standard Beta posterior, which pools all episodes equally, conflates data from $K_{\text{test}}$ different policies and can yield a biased estimate of the \textit{current} success rate $\theta_{a,T}$.
-
-
-\rparagraph{Geometric Discount Posterior}
-Instead of reweighting individual episodes, we address staleness at the level of the Beta pseudo-counts. The geometric discount posterior introduced in Eq.~(\ref{eq:beta_update}) shrinks existing counts by $w \in (0, 1]$ at each step before adding new observations. By induction, the posterior at decision time $T$ takes the unrolled form:
-\begin{equation}
-    \alpha_T = w^T + \sum_{t=1}^{T} w^{T-t}\, m_t, \qquad \beta_T = w^T + \sum_{t=1}^{T} w^{T-t}\, (n - m_t),
-    \label{eq:unrolled}
-\end{equation}
-where $m_t$ is the number of successes and $n$ is the number of episodes assigned to this arm at step $t$. Data from step $t$ enters with weight $w^{T-t}$: recent data dominates while older observations fade out. The total pseudo-count $S_T := \alpha_T + \beta_T = 2w^T + nG$, where $G = \sum_{k=0}^{T-1} w^k = (1 - w^T)/(1 - w)$, is deterministic and does not depend on the random outcomes $m_t$.
-
-\rparagraph{Bias--Variance Tradeoff and the MSE Objective}
-The discounted posterior mean $\mu_w = \alpha_T / S_T$ is a weighted average of the per-step observed success rates, with normalized weights $\omega_t = w^{T-t}/G$. As an estimator of the \textit{current} success rate $\theta_{a,T}$, its mean squared error decomposes as
-\begin{equation}
-    \mathrm{MSE}(w) = \underbrace{\Big(\textstyle\sum_t \omega_t\, \delta_t\Big)^{\!2}}_{\text{bias}^2} \;+\; \underbrace{\mathrm{Var}[\mu_w]}_{\text{variance}},
-    \label{eq:mse}
-\end{equation}
-where $\delta_t = \theta_{a,t} - \theta_{a,T}$ is the staleness of step $t$'s data. Larger $w$ retains more historical data, reducing variance but increasing bias (more stale episodes contribute). Smaller $w$ discounts old data, reducing bias but increasing variance (fewer effective samples). The optimal $w^*$ balances these two terms. To make this optimization tractable, we need to bound the unknown staleness terms $\delta_t$.
-
-\rparagraph{Staleness Bias Bound}
-The per-step staleness can be bounded in terms of cumulative policy divergence:
-\begin{equation}
-    |\delta_t| = |\theta_{a,t} - \theta_{a,T}| \;\leq\; B_t \;:=\; \sum_{s=t}^{T-1} \kappa_s, \qquad \kappa_s = \sqrt{\tfrac{L_s \cdot \mathrm{KL}_s^{\mathrm{avg}}}{2}},
-    \label{eq:staleness_bound}
-\end{equation}
-where $L_s$ is the mean episode length (in tokens) at step $s$ and $\mathrm{KL}_s^{\mathrm{avg}}$ is the step-to-step mean per-token KL divergence. The derivation chains four standard inequalities: (i) the success-rate gap is bounded by total variation between trajectory distributions; (ii) total variation telescopes across training steps; (iii) Pinsker's inequality converts total variation to KL divergence; (iv) trajectory-level KL decomposes into a sum of per-token KL contributions. Substituting these bounds into~\eqref{eq:mse} yields an MSE upper bound that depends only on $w$, the staleness increments $\{\kappa_s\}$, and the per-step sample size $n$---all of which are known or observable during training.
-
-The minimax-optimal discount $w^*$ that minimizes this worst-case MSE is the unique solution of a one-dimensional optimization over $(0, 1]$, computable at $O(T)$ cost. The staleness increments $\kappa_s$ can be obtained directly from standard GRPO training metrics (the logged \texttt{ppo\_kl} values) with no additional forward passes. Details of the $w^*$ computation and the practical $\kappa_s$ formula are provided in Appendix~\ref{app:staleness_details}.
+where $\alpha, \beta$ are the discounted pseudo-counts from Eq.~(\ref{eq:beta_update}). Because old evidence is downweighted, this decision reflects the skill version's value under the \textit{current} policy, not a mixture of past policies. If accepted, $\mathcal{V}_{\text{new}}$ becomes the new baseline; if rejected, the skill bank reverts to $\mathcal{V}_{\text{old}}$. In either case, the next cycle begins immediately.
 
 
 \begin{algorithm}[t]
@@ -200,31 +173,23 @@ The minimax-optimal discount $w^*$ that minimizes this worst-case MSE is the uni
 \caption{\ours: RL-Guided Skill-Policy Co-Evolution}
 \label{alg:scrl}
 \begin{algorithmic}[1]
-    \STATE \textbf{Input}: Policy $\pi_{\theta_0}$, assertion grader $\mathcal{G}$, analyzer $\mathcal{Z}$, version analyst $\mathcal{Z}_v$, version author $\mathcal{O}_v$, steps $T$, evolution freq $K_e$, test steps $K_{\text{test}}$, min episodes $N_{\min}$, discount $w$.
-    \STATE \textbf{Initialize}: Skill bank $\mathcal{S}_0 {=} \emptyset$, version $\mathcal{V}_{\text{old}} {=} \mathcal{S}_0$, assertions $\mathcal{A}$, reservoir $\mathcal{R} {\leftarrow} \emptyset$, $\text{Beta}(1,1)$ priors.
+    \STATE \textbf{Input}: Policy $\pi_{\theta_0}$, training steps $T$, evolution frequency $K_e$.
+    \STATE \textbf{Initialize}: Skill bank $\mathcal{S} {=} \emptyset$, reservoir $\mathcal{R} {\leftarrow} \emptyset$, $\text{Beta}(1,1)$ priors for $p_{\text{new}}, p_{\text{old}}$, $\hat{M} {\leftarrow} \infty$.
     \FOR{$t=1, \dots, T$}
-        \STATE \textcolor{paleblue}{[\textbf{Phase 1}: GRPO Rollout with Dynamic Skills]}
-        \STATE Sample task $q \sim \mathcal{D}$.
-        \STATE If testing: assign each episode to $\mathcal{V}_{\text{new}}$ or $\mathcal{V}_{\text{old}}$ via $d \sim \text{Bernoulli}(\Pr(\theta_{\text{new}} > \theta_{\text{old}}))$.
-        \STATE For each step: evaluate triggers and inject active skills from the assigned version.
-        \STATE Generate $\{\tau_i\}_{i=1}^G \sim \pi_{\theta_{\text{old}}}(\cdot | q, \mathcal{S}_{\text{active}}; \mathcal{T})$; compute rewards $\{r_i\}$.
-        \STATE Update $\theta_t \leftarrow \text{GRPO}(\theta_{t-1}, \{\tau_i\}, \{r_i\})$. \hfill {\color{gray}\textit{// duty 1: policy}}
-        \STATE Add failure episodes to $\mathcal{R}$. \hfill {\color{gray}\textit{// duty 2: reservoir}}
-        \STATE Discount and update: $(\alpha, \beta) \leftarrow (w\alpha + r, w\beta + (1{-}r))$ for assigned arm. \hfill {\color{gray}\textit{// duty 3: evaluation}}
-        \STATE \textcolor{palered}{[\textbf{Phase 2}: Version Evolution Decision]}
-        \IF{testing \AND steps $\geq K_{\text{test}}$ \AND episodes $\geq N_{\min}$}
-            \STATE Accept $\mathcal{V}_{\text{new}}$ if $\mathbb{E}[\theta_{\text{new}}] > \mathbb{E}[\theta_{\text{old}}]$: set $\mathcal{S} \leftarrow \mathcal{V}_{\text{new}}$; else revert to $\mathcal{V}_{\text{old}}$.
-        \ENDIF
-        \STATE \textcolor{palegreen}{[\textbf{Phase 3}: Version Creation (every $K_e$ steps, if not testing)]}
-        \IF{$t \bmod K_e = 0$ \AND not testing}
-            \STATE Grade reservoir: pass rates $\leftarrow \mathcal{G}(\mathcal{R}, \mathcal{A})$.
-            \STATE Run analyzer: $(\Delta\mathcal{A}, \mathcal{F}_{\text{diag}}, \mathcal{E}_{\text{sel}}) \leftarrow \mathcal{Z}(\mathcal{A}, \mathcal{R}, \mathcal{S})$; update $\mathcal{A}$.
-            \STATE Propose change plan: $\mathcal{P} \leftarrow \mathcal{Z}_v(\mathcal{F}_{\text{diag}}, \mathcal{E}_{\text{sel}}, \mathcal{S}, \text{history})$. \hfill {\color{gray}\textit{// analyst: add/modify/delete ops}}
-            \STATE Create version: $\mathcal{V}_{\text{new}} \leftarrow \mathcal{O}_v(\mathcal{P}, \mathcal{E}_{\text{sel}}, \mathcal{S})$. \hfill {\color{gray}\textit{// author: write skill content}}
-            \STATE Begin Thompson Sampling: $\mathcal{V}_{\text{new}}$ vs $\mathcal{V}_{\text{old}}$.
+        \STATE \textcolor{paleblue}{[\textbf{GRPO Rollout with Skill A/B Testing}]}
+        \STATE Sample task $q \sim \mathcal{D}$; assign each episode to $\mathcal{V}_{\text{new}}$ or $\mathcal{V}_{\text{old}}$ via Thompson Sampling (Eq.~\ref{eq:thompson_decision}).
+        \STATE Evaluate triggers; inject active skills from the assigned version into the prompt.
+        \STATE Generate $\{\tau_i\}_{i=1}^G \sim \pi_{\theta_{t-1}}(\cdot | q, \mathcal{S}_{\text{active}}; \mathcal{T})$; compute rewards $\{r_i\}$.
+        \STATE Update policy: $\theta_t \leftarrow \text{GRPO}(\theta_{t-1}, \{\tau_i\}, \{r_i\})$. \hfill {\color{gray}\textit{// duty 1: policy optimization}}
+        \STATE Add failed episodes to reservoir $\mathcal{R}$. \hfill {\color{gray}\textit{// duty 2: failure collection}}
+        \STATE Discount ($w_t {=} \hat{M}/(\hat{M}{+}n_t)$) and update Beta posteriors for $p_{\text{new}}, p_{\text{old}}$ (Eq.~\ref{eq:beta_update}). \hfill {\color{gray}\textit{// duty 3: bandit eval.}}
+        \IF{$t \bmod K_e = 0$}
+            \STATE \textcolor{palered}{[\textbf{Evolution Decision}]} Accept $\mathcal{V}_{\text{new}}$ if $\mathbb{E}[p_{\text{new}}] > \mathbb{E}[p_{\text{old}}]$; update $\hat{M}$ via predictive-likelihood MLE.
+            \STATE \textcolor{palegreen}{[\textbf{Skill Creation}]} Analyze failures in $\mathcal{R}$; propose new $\mathcal{V}_{\text{new}}$ with add/modify/delete operations.
+            \STATE Reset $\text{Beta}(1,1)$ priors; begin testing $\mathcal{V}_{\text{new}}$ vs $\mathcal{V}_{\text{old}}$.
         \ENDIF
     \ENDFOR
-    \STATE \textbf{Return} optimized policy $\pi_{\theta_T}$ and skill bank $\mathcal{S}_T$.
+    \STATE \textbf{Return} optimized policy $\pi_{\theta_T}$ and skill bank $\mathcal{S}$.
 \end{algorithmic}
 \end{footnotesize}
 \end{algorithm}
@@ -246,14 +211,14 @@ We evaluate \ours~on three diverse agentic benchmarks: WebShop \citep{yao2022web
 We compare \ours~against two categories of baselines. \textit{Prompt-based methods}: zero-shot \textbf{Baseline} (Qwen3-4B-Instruct), and retrieval-augmented variants including \textbf{BM25}, \textbf{Contriever}, \textbf{Qwen3 Embedding}, \textbf{HippoRAG}, \textbf{MemoRAG}, \textbf{Self-RAG}, \textbf{GraphRAG}, and \textbf{Long Context} (full trajectory history in context). \textit{RL methods}: \textbf{GRPO}, standard GRPO training with a static instruction and no skills. We also evaluate ablation variants of \ours~(see \S\ref{sec:ablation}).
 
 \rparagraph{Implementation}
-We build on the VeRL framework \citep{sheng2025hybridflow} with Ray-based distributed training on 8$\times$A100 GPUs. For the skill creator pipeline, we use Claude Sonnet 4.5 as the LLM for both the assertion analyzer and skill optimizer. Thompson Sampling uses $\text{Beta}(1,1)$ priors, $K_{\text{test}} = 5$ evaluation steps, $N_{\min} = 20$ minimum triggered episodes, and probability clamping at $[0.15, 0.85]$. The failure reservoir maintains up to 200 trajectories with 70/30 failure/success stratification.
+We build on the VeRL framework \citep{sheng2025hybridflow} with Ray-based distributed training on 8$\times$A100 GPUs. For the skill creator pipeline, we use Claude Sonnet 4.5 as the LLM for both the assertion analyzer and skill optimizer. Thompson Sampling uses $\text{Beta}(1,1)$ priors, evolution frequency $K_e = 5$ steps, and exploration bound $\varepsilon_{\text{ts}} = 0.2$. The failure reservoir maintains up to 200 trajectories with 70/30 failure/success stratification.
 
 % TODO: Add detailed hyperparameters table
 
 \subsection{Main Results}
 
 \begin{table*}[!t]
-\caption{Main results on Qwen3-4B (mean\tpm{std} over 3 replicates, \%). ALFWorld groups task types into Pick\&Place (P\&P = pick\_and\_place + pick\_two\_obj), Transform (Trans.\ = avg of heat, cool, clean), and Examine (Exam.\ = look\_at\_obj\_in\_light). Search groups by hop count: single-hop (SH) and multi-hop (MH). Best in each column \textbf{bolded}.}
+\caption{Main results (mean\tpm{std} over 3 replicates, \%). ALFWorld groups task types into Pick\&Place (P\&P), Transform (Trans.\ = avg of heat, cool, clean), and Examine (Exam.). Search groups by hop count: single-hop (SH) and multi-hop (MH). Best per model scale \textbf{bolded}.}
 \label{tab:main_results}
 \centering
 \scriptsize
@@ -266,6 +231,8 @@ We build on the VeRL framework \citep{sheng2025hybridflow} with Ray-based distri
 \cmidrule(lr){3-6} \cmidrule(lr){8-11}
 & Method & P\&P & Trans. & Exam. & Avg && P\&P & Trans. & Exam. & Avg & Overall \\
 \midrule
+\rowcolor{Gray} \multicolumn{12}{c}{\textbf{Qwen3-4B}} \\
+\midrule
 \textit{Baseline} & Zero-shot & 54.7\tpm{0.0} & 28.1\tpm{0.0} & 28.6\tpm{0.0} & 37.1\tpm{0.0} && 30.8\tpm{0.0} & 28.9\tpm{0.0} & 66.7\tpm{0.0} & 32.8\tpm{0.0} & 35.0\tpm{0.0} \\
 \midrule
 \multirow{3}{*}{\textit{w/ Skill}} & BM25 & 46.9\tpm{0.0} & 20.9\tpm{0.0} & 50.0\tpm{0.0} & 35.0\tpm{0.0} && 23.1\tpm{0.0} & 28.9\tpm{0.0} & 66.7\tpm{0.0} & 31.3\tpm{0.0} & 33.2\tpm{0.0} \\
@@ -275,6 +242,11 @@ We build on the VeRL framework \citep{sheng2025hybridflow} with Ray-based distri
 \multirow{3}{*}{\textit{w/ RL}} & GRPO & 93.1\tpm{1.2} & 62.5\tpm{5.7} & \textbf{92.3}\tpm{0.0} & 78.6\tpm{3.3} && 84.2\tpm{5.2} & 72.6\tpm{2.7} & 94.4\tpm{9.6} & 78.9\tpm{1.9} & 78.7\tpm{2.6} \\
 & SkillRL & 88.2\tpm{0.0} & 85.9\tpm{0.0} & 61.5\tpm{0.0} & 85.7\tpm{0.0} && 68.7\tpm{7.5} & 78.4\tpm{0.8} & 94.4\tpm{5.6} & 77.1\tpm{2.8} & 81.5\tpm{1.4} \\
 & \textbf{\ours} & \textbf{97.9}\tpm{0.0} & \textbf{88.5}\tpm{0.0} & \textbf{92.3}\tpm{0.0} & \textbf{93.6}\tpm{0.0} && \textbf{93.0}\tpm{3.4} & \textbf{93.1}\tpm{4.2} & \textbf{98.1}\tpm{3.2} & \textbf{93.5}\tpm{1.1} & \textbf{93.6}\tpm{0.6} \\
+\midrule
+\rowcolor{Gray} \multicolumn{12}{c}{\textbf{Qwen3-8B}} \\
+\midrule
+\multirow{2}{*}{\textit{w/ RL}} & GRPO & 93.8\tpm{1.0} & 72.1\tpm{5.3} & 66.7\tpm{4.4} & 80.7\tpm{1.9} && \textbf{82.1}\tpm{1.4} & 81.8\tpm{3.4} & 79.6\tpm{3.2} & \textbf{81.6}\tpm{2.3} & 81.1\tpm{1.7} \\
+& SkillRL & \textbf{95.5}\tpm{1.0} & \textbf{83.8}\tpm{2.5} & \textbf{87.2}\tpm{4.4} & \textbf{89.0}\tpm{0.4} && 74.0\tpm{5.1} & 79.6\tpm{2.0} & \textbf{94.4}\tpm{5.6} & 79.9\tpm{2.6} & \textbf{84.5}\tpm{1.2} \\
 \bottomrule
 \end{tabular*}
 \vspace{4pt}
@@ -286,6 +258,8 @@ We build on the VeRL framework \citep{sheng2025hybridflow} with Ray-based distri
 \cmidrule(lr){3-5} \cmidrule(lr){7-9}
 & Method & SH & MH & Avg && SH & MH & Avg & Overall \\
 \midrule
+\rowcolor{Gray} \multicolumn{10}{c}{\textbf{Qwen3-4B}} \\
+\midrule
 \textit{Baseline} & Zero-shot & 19.3\tpm{0.0} & 28.7\tpm{0.0} & 24.0\tpm{0.0} && 34.3\tpm{0.0} & 23.7\tpm{0.0} & 28.5\tpm{0.0} & 27.1\tpm{0.0} \\
 \midrule
 \multirow{3}{*}{\textit{w/ Skill}} & BM25 & 25.3\tpm{0.0} & 35.0\tpm{0.0} & 30.2\tpm{0.0} && 44.3\tpm{0.0} & 23.7\tpm{0.0} & 33.1\tpm{0.0} & 32.2\tpm{0.0} \\
@@ -295,6 +269,10 @@ We build on the VeRL framework \citep{sheng2025hybridflow} with Ray-based distri
 \multirow{3}{*}{\textit{w/ RL}} & GRPO & 48.0\tpm{0.0} & 52.4\tpm{1.2} & 50.2\tpm{0.6} && 54.7\tpm{0.0} & 31.4\tpm{0.8} & 42.0\tpm{0.5} & 44.6\tpm{0.3} \\
 & SkillRL & \textbf{50.7}\tpm{0.0} & 52.0\tpm{0.0} & 51.3\tpm{0.0} && 55.7\tpm{0.0} & 35.1\tpm{0.6} & 44.5\tpm{0.3} & 46.6\tpm{0.2} \\
 & \textbf{\ours} & 49.6\tpm{0.8} & \textbf{55.3}\tpm{0.6} & \textbf{52.4}\tpm{0.1} && \textbf{56.6}\tpm{0.2} & \textbf{37.8}\tpm{0.0} & \textbf{46.3}\tpm{0.1} & \textbf{48.2}\tpm{0.1} \\
+\midrule
+\rowcolor{Gray} \multicolumn{10}{c}{\textbf{Qwen3-8B}} \\
+\midrule
+\textit{w/ RL} & GRPO & \textbf{48.0}\tpm{0.0} & \textbf{51.9}\tpm{0.8} & \textbf{49.9}\tpm{0.4} && \textbf{57.7}\tpm{0.0} & \textbf{31.0}\tpm{0.9} & \textbf{43.1}\tpm{0.5} & \textbf{45.3}\tpm{0.4} \\
 \bottomrule
 \end{tabular*}
 \vspace{-1mm}
@@ -512,36 +490,71 @@ We introduced \ours, a framework that enables the co-evolution of modular skills
 
 % TODO: Detail the specific trigger types (general, beginning, action\_pattern) with examples.
 
-\section{Staleness Correction: Practical Details}
+\section{Adaptive Staleness Correction: Details}
 \label{app:staleness_details}
 
-\subsection{Computing $\kappa_s$ from Logged Metrics}
+This appendix provides the full details of the predictive-likelihood MLE procedure for estimating the memory parameter~$M$ in the adaptive discount rule $w_t = M/(M + n_t)$ from Eq.~(\ref{eq:beta_update}).
 
-The staleness increment $\kappa_s$ in Eq.~(\ref{eq:staleness_bound}) requires the step-to-step mean per-token KL divergence $\mathrm{KL}_s^{\mathrm{avg}}$. In PPO/GRPO, the standard training metric \texttt{ppo\_kl} averages the per-token KL across $M$ mini-batches. Each mini-batch's KL reflects one fewer gradient step than has actually occurred (the KL is computed before the gradient update, not after). Under a linear model for KL accumulation justified by PPO clipping, the step-to-step KL is:
+\subsection{Predictive-Likelihood Criterion}
+
+Suppose we have $K$ completed A/B tests, each spanning $T$ training steps. Test~$k$ provides per-step per-arm data $\{(m_t^{(k,a)}, n_t^{(k,a)})\}_{t=1}^T$ for each arm $a \in \{A, B\}$, where $m_t$ is the number of successes and $n_t$ is the number of episodes assigned to arm~$a$ at step~$t$.
+
+For a candidate $M$ and one arm's data sequence within one test, the \textbf{sequential predictive log-likelihood} is:
+\begin{enumerate}[itemsep=2pt]
+\item Initialize $\alpha = 1$, $\beta_p = 1$ \quad ($\mathrm{Beta}(1,1)$ prior).
+\item For $t = 1, \ldots, T$:
+  \begin{enumerate}
+    \item Discount: $\tilde\alpha = \frac{M}{M + n_t} \cdot \alpha$, \; $\tilde\beta = \frac{M}{M + n_t} \cdot \beta_p$.
+    \item Score: $\ell_t = \log P\bigl(m_t \mid \mathrm{BetaBin}(n_t, \tilde\alpha, \tilde\beta)\bigr)$.
+    \item Update: $\alpha = \tilde\alpha + m_t$, \; $\beta_p = \tilde\beta + (n_t - m_t)$.
+  \end{enumerate}
+\item Return $\sum_{t=1}^T \ell_t$.
+\end{enumerate}
+The BetaBinomial predictive probability at step~2(b) is $P(m \mid n, \tilde\alpha, \tilde\beta) = \binom{n}{m} B(m + \tilde\alpha, n - m + \tilde\beta) / B(\tilde\alpha, \tilde\beta)$, where $B(\cdot, \cdot)$ is the Beta function. The total log-likelihood is
 \begin{equation}
-    \mathrm{KL}_s^{\mathrm{avg}} = \frac{2M}{M-1}\,\texttt{ppo\_kl}_s.
+    L(M) = \sum_{k=1}^K \sum_{a \in \{A, B\}} \mathrm{score}\bigl(M;\, \{m_t^{(k,a)}, n_t^{(k,a)}\}_{t=1}^T\bigr),
+    \label{eq:total_ll}
 \end{equation}
-Substituting into Eq.~(\ref{eq:staleness_bound}):
-\begin{equation}
-    \kappa_s = \lambda\,\sqrt{\frac{M\, L_s}{M - 1}\;\texttt{ppo\_kl}_s},
-    \label{eq:kappa_practical}
-\end{equation}
-where $L_s$ is the mean episode length (in tokens) at step $s$ and $\lambda \leq 1$ is a scaling parameter that absorbs the looseness of the Pinsker bound (the theoretical bound uses $\lambda = 1$; in practice $\lambda < 1$ is tighter since the worst case is rarely realized). No additional forward passes are needed.
+and the MLE is $\hat{M} = \arg\max_M L(M)$, found by grid search over $M \in [1, 2000]$.
 
-\subsection{Computing the Optimal Discount Factor $w^*$}
+\subsection{Online Estimation}
 
-Given the staleness bounds $\{B_t\}_{t=1}^T$ from Eq.~(\ref{eq:staleness_bound}) and the per-step sample size $n$, the minimax-optimal discount factor solves:
-\begin{equation}
-    w^* = \arg\min_{w \in (0,1]} \frac{b(w)^2 + v\, H(w)}{G(w)^2},
-\end{equation}
-where $b(w) = \sum_{t=1}^T w^{T-t} B_t$ is the unnormalized weighted bias bound, $v = 1/(4n)$ is the worst-case Bernoulli variance coefficient, $H(w) = \sum_{k=0}^{T-1} w^{2k} = (1 - w^{2T})/(1 - w^2)$, and $G(w) = (1 - w^T)/(1 - w)$. This is a one-dimensional optimization that can be solved via golden-section search or grid evaluation (e.g., 100 points on $[0.01, 1]$) at $O(T)$ cost per function evaluation.
+The log-likelihood~(\ref{eq:total_ll}) decomposes additively across tests. After each completed test~$k$, we update $L_k(M) = L_{k-1}(M) + \mathrm{score}(M;\, \text{test}~k, A) + \mathrm{score}(M;\, \text{test}~k, B)$ and re-compute $\hat{M}_k = \arg\max_M L_k(M)$. This is $O(|\text{grid}| \times T)$ work per new test, with no need to re-score history.
 
-Two limiting regimes provide intuition:
-\begin{itemize}[leftmargin=*]
-    \item \textit{Noise-dominated} (small $n$, mild drift): $w^* \approx 1$. The variance reduction from retaining all data outweighs the small staleness bias. This is our typical regime ($n \approx 4$--$8$ episodes per arm per step), so the discount is mild.
-    \item \textit{Bias-dominated} (large $n$, strong drift): $w^* \ll 1$. Bias dominates and old data should be discounted aggressively.
+\subsection{Deployment Matching}
+
+The scoring procedure mirrors the actual Thompson Sampling deployment:
+\begin{itemize}[itemsep=2pt, leftmargin=*]
+    \item The prior resets at the start of each test (as in deployment).
+    \item The discount $w_t = M/(M + n_t)$ uses the \emph{actual} per-arm allocation at each step, not an average or fixed~$n$.
+    \item The BetaBinomial score evaluates one-step-ahead prediction accuracy---the same quantity that determines posterior quality during the test.
 \end{itemize}
-The crossover occurs roughly when $4n \cdot B_t^2 \approx 1$, i.e., when the squared staleness bias from old steps becomes comparable to the per-step sampling variance.
+This avoids the model misspecification that arises from estimating~$M$ using the overall success rate with a fixed per-arm count. In our experiments, such a ``naive'' approach overestimates $M$ by 1.5--2.2$\times$ because the overall rate smooths out per-arm volatility, causing the MLE to infer slower drift than actually exists.
+
+\subsection{Empirical Validation}
+
+We validate the estimation procedure on two domains from our experiments: Search (59 tests, per-arm $n_t \in [168, 1112]$) and ALFWorld (20 tests, per-arm $n_t \in [13, 115]$).
+
+\begin{table}[h]
+\centering
+\caption{Estimated memory parameter $\hat{M}$ and implied per-arm discount factors $w_t = \hat{M}/(\hat{M} + n_t)$ at the 10th, 50th, and 90th percentiles of the per-arm allocation distribution.}
+\label{tab:m_estimates}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Domain} & $\hat{M}$ & $w$ \textbf{at p10} $n_t$ & $w$ \textbf{at p50} $n_t$ & $w$ \textbf{at p90} $n_t$ \\
+\midrule
+Search    & 457 & 0.69 & 0.42 & 0.30 \\
+ALFWorld  &  76 & 0.79 & 0.54 & 0.41 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent Key observations:
+\begin{itemize}[itemsep=2pt, leftmargin=*]
+    \item $\hat{M}$ differs between domains (457 vs.\ 76), reflecting that Search has slower drift and larger samples while ALFWorld has faster drift and smaller samples.
+    \item Within each domain, the adaptive discount automatically differentiates: the minority arm (low~$n_t$, p10) retains 69--79\% of its history, while the majority arm (high~$n_t$, p90) retains only 30--41\%.
+    \item The online estimate $\hat{M}_k$ stabilizes after ${\sim}$10 completed tests (${\sim}$50 training steps). Before that, using no discounting ($M = \infty$) suffices since there is too little data for the discount to materially affect decisions.
+\end{itemize}
 
 
 \end{document}
