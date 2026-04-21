@@ -493,7 +493,49 @@ We introduced \ours, a framework that enables the co-evolution of modular skills
 \section{Adaptive Staleness Correction: Details}
 \label{app:staleness_details}
 
-This appendix provides the full details of the predictive-likelihood MLE procedure for estimating the memory parameter~$M$ in the adaptive discount rule $w_t = M/(M + n_t)$ from Eq.~(\ref{eq:beta_update}).
+This appendix motivates the adaptive discount rule $w_t = 1/(1 + n_t/M)$ from Eq.~(\ref{eq:beta_update}), grounds it in the Bayesian posterior update, and provides the full procedure for estimating~$M$ from data.
+
+\subsection{Motivation: From Bayesian Updates to Adaptive Discounting}
+
+We begin from the standard Beta-Bernoulli posterior update and show how the discount rule emerges naturally from the desire to control the influence of new observations relative to accumulated evidence.
+
+\rparagraph{The Posterior Mean as a Weighted Average}
+After observing $m_t$ successes in $n_t$ episodes at step~$t$, the standard (undiscounted) Beta posterior update $\alpha_t = \alpha_{t-1} + m_t$ yields a posterior mean that is a weighted average of the prior estimate and the new observation:
+\begin{equation}
+    \mu_t = \frac{S_{t-1}}{S_{t-1} + n_t}\;\mu_{t-1} + \frac{n_t}{S_{t-1} + n_t}\;\frac{m_t}{n_t},
+    \label{eq:standard_update}
+\end{equation}
+where $S_{t-1} = \alpha_{t-1} + \beta_{t-1}$ is the total pseudo-count. The weight on new evidence is $n_t/(S_{t-1} + n_t)$: the more data observed so far ($S_{t-1}$ large), the less each new batch shifts the estimate. In a stationary setting, this is optimal---the posterior concentrates as evidence accumulates.
+
+\rparagraph{The Problem Under Non-Stationarity}
+When the policy evolves, the success probability $p_{a,t}$ drifts across steps. The accumulated pseudo-count $S_{t-1}$ reflects all past policies, not just the current one. A large $S_{t-1}$ (from many past observations) anchors the estimate to stale data, making it slow to respond to genuine changes in the success rate. The fundamental issue is that the posterior treats all evidence as equally valid, regardless of when it was collected.
+
+\rparagraph{Discounting as Effective Sample Size Control}
+A geometric discount $\alpha_t = w \cdot \alpha_{t-1} + m_t$ shrinks the accumulated pseudo-count before each update, reducing the effective sample size of old evidence. With discount factor~$w$, the posterior mean becomes:
+\begin{equation}
+    \mu_t = \frac{w \cdot S_{t-1}}{w \cdot S_{t-1} + n_t}\;\mu_{t-1} + \frac{n_t}{w \cdot S_{t-1} + n_t}\;\frac{m_t}{n_t}.
+    \label{eq:discounted_update}
+\end{equation}
+The key quantity is the ratio of old-to-new influence: $w \cdot S_{t-1} : n_t$. With a constant~$w$, this ratio depends on the entire allocation history through~$S_{t-1}$. In our setting, Thompson Sampling causes the per-arm episode count $n_t$ to vary by 5--10$\times$ across steps (e.g., 168 to 1112 in Search). The same constant~$w$ cannot be appropriate for both: after a step where the arm received 168 episodes, the accumulated estimate is noisy and should be retained; after a step with 1112 episodes, the new observation is precise and old evidence should be discounted more aggressively.
+
+\rparagraph{The $M$-Parameterization}
+To decouple the discount from the allocation history, we set $w_t = M/(M + n_t) = 1/(1 + n_t/M)$. Substituting into Eq.~(\ref{eq:discounted_update}), the effective old pseudo-count after discounting becomes $w_t \cdot S_{t-1} = M \cdot S_{t-1}/(M + n_t)$. This yields an intuitive interpretation:
+\begin{itemize}[itemsep=2pt, leftmargin=*]
+    \item When $n_t = M$ (the crossover): $w_t = 1/2$, and old and new evidence contribute equally.
+    \item When $n_t \ll M$ (minority arm, noisy observation): $w_t \approx 1$, the accumulated estimate is mostly retained.
+    \item When $n_t \gg M$ (majority arm, precise observation): $w_t \approx 0$, old evidence is aggressively discounted.
+\end{itemize}
+The parameter $M$ can be interpreted as the \emph{number of new observations at which old evidence loses half its weight}. It controls the balance between responsiveness to drift and robustness to noise, from a single scalar.
+
+\rparagraph{Connection to Exponential Smoothing}
+The update $\alpha_t = w_t \cdot \alpha_{t-1} + m_t$ with $w_t = M/(M + n_t)$ can be rewritten as
+\begin{equation}
+    \alpha_t = \frac{M}{M + n_t} \cdot \alpha_{t-1} + m_t = \frac{M \cdot \alpha_{t-1} + m_t \cdot (M + n_t) / 1}{M + n_t}.
+\end{equation}
+When $n_t = n$ is constant, this reduces to a standard geometric discount $w = M/(M+n)$, recovering exponential smoothing with a fixed forgetting rate. The generalization to variable $n_t$ preserves the exponential smoothing structure while adapting the forgetting rate to the informativeness of each observation.
+
+\rparagraph{Why Not Estimate $w$ Directly?}
+An alternative is to estimate a constant discount factor~$w^*$ by minimizing a worst-case MSE expression derived from per-step KL divergence bounds (as in importance-weighted approaches). This requires estimating the drift rate, assumes constant~$n$, and introduces a scaling parameter to handle the looseness of Pinsker's inequality. The $M$-parameterization avoids these issues: it handles variable~$n_t$ naturally and is estimated purely from observational data via the predictive likelihood described below.
 
 \subsection{Predictive-Likelihood Criterion}
 
