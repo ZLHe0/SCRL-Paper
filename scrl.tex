@@ -58,7 +58,7 @@ The fundamental limitation of static skills mirrors that of static instructions 
 
 To bridge this gap, we propose \ours, an \textbf{RL}-guided \textbf{S}kill \textbf{C}reator for agentic skill-policy co-evolution. \ours~integrates skill creation and evolution as dynamic components of the RL loop, delivering two major innovations. First, we introduce an \textit{assertion-driven skill version creator} that evolves the skill library through structured versions. A rule-based assertion grader provides quantitative failure diagnosis, an LLM-based analyzer identifies representative failure patterns, and a two-step version creation process (analyst $\to$ author) proposes targeted changes to the skill library---adding new skills, modifying existing ones, or deleting obsolete ones---each paired with \textit{trigger conditions} that determine when skills activate during rollouts. This enables situational guidance without prompt bloat. Second, we propose an \textit{RL-guided skill evolution mechanism via Thompson Sampling} \citep{thompson1933likelihood}, where GRPO rollouts serve \textbf{triple duty}: policy optimization via standard gradients, failure collection for skill creation via a bounded reservoir, and bandit evaluation for skill evolution via Thompson Sampling. Each proposed version of the skill library is tested as a bandit decision by stochastically assigning each episode to either the new or current version, with Beta-Binomial posteriors providing principled, sample-efficient accept/reject decisions. Zero additional rollouts are required beyond standard GRPO training.
 
-We validate \ours~through extensive experiments on three diverse agentic benchmarks, WebShop \citep{yao2022webshop}, multi-hop question answering with search tools, and ALFWorld \citep{shridharalfworld}, across three model scales (4B, 8B, 14B parameters). \ours~achieves substantial convergence speedup over GRPO and static skill baselines, with ablation studies confirming the contribution of each component. The entire skill creation and evolution process incurs only marginal computational overhead: a few LLM calls per evolution cycle, with no additional rollouts.
+We validate \ours~on two diverse agentic benchmarks, multi-hop question answering with search tools and ALFWorld \citep{shridharalfworld}, across two model scales (4B and 8B parameters). \ours~achieves substantial convergence speedup over GRPO and static skill baselines, with ablation studies confirming the contribution of each component. The entire skill creation and evolution process incurs only marginal computational overhead: a few LLM calls per evolution cycle, with no additional rollouts.
 
 
 %=============================================================================
@@ -205,15 +205,10 @@ The complete procedure for \ours~is provided in Algorithm~\ref{alg:scrl}. Overal
 \subsection{Setup}
 
 \sparagraph{Models and benchmarks}
-We evaluate \ours~on three diverse agentic benchmarks: WebShop \citep{yao2022webshop} (e-commerce navigation with partial credit scoring), multi-hop question answering with a search tool (NQ + HotpotQA), and ALFWorld \citep{shridharalfworld} (embodied household tasks). We conduct experiments using the Qwen3 model family \citep{bai2023qwen} at three scales: 4B, 8B, and 14B parameters.
+We evaluate \ours~on two diverse agentic benchmarks: multi-hop question answering with a search tool (NQ + HotpotQA) and ALFWorld \citep{shridharalfworld} (embodied household tasks). We conduct experiments using the Qwen3 model family \citep{bai2023qwen} at two scales: 4B and 8B parameters.
 
 \rparagraph{Baselines}
-We compare \ours~against two categories of baselines. \textit{Prompt-based methods}: zero-shot \textbf{Baseline} (Qwen3-4B-Instruct), and retrieval-augmented variants including \textbf{BM25}, \textbf{Contriever}, \textbf{Qwen3 Embedding}, \textbf{HippoRAG}, \textbf{MemoRAG}, \textbf{Self-RAG}, \textbf{GraphRAG}, and \textbf{Long Context} (full trajectory history in context). \textit{RL methods}: \textbf{GRPO}, standard GRPO training with a static instruction and no skills. We also evaluate ablation variants of \ours~(see \S\ref{sec:ablation}).
-
-\rparagraph{Implementation}
-We build on the VeRL framework \citep{sheng2025hybridflow} with Ray-based distributed training on 8$\times$A100 GPUs. For the skill creator pipeline, we use Claude Sonnet 4.5 as the LLM for both the assertion analyzer and skill optimizer. Thompson Sampling uses $\text{Beta}(1,1)$ priors, evolution frequency $K_e = 5$ steps, and exploration bound $\varepsilon_{\text{ts}} = 0.2$. The failure reservoir maintains up to 200 trajectories with 70/30 failure/success stratification.
-
-% TODO: Add detailed hyperparameters table
+We compare \ours~against two categories of baselines. \textit{Prompt-based methods}: zero-shot \textbf{Baseline} (Qwen3-4B-Instruct), and retrieval-augmented variants including \textbf{BM25}, \textbf{HippoRAG}, and \textbf{Long Context} (full trajectory history in context). \textit{RL methods}: \textbf{GRPO}, standard GRPO training with a static instruction and no skills, and \textbf{SkillRL} \citep{xia2025skillrl}, which distills teacher-model skills as static augmentations. We also evaluate ablation variants of \ours~(see \S\ref{sec:ablation}). Implementation details are provided in Appendix~\ref{app:implementation}.
 
 \subsection{Main Results}
 
@@ -432,11 +427,6 @@ We present representative reasoning traces from the Search domain showing how th
 \textbf{\textcolor{successgreen}{Result: SUCCESS}} --- The most sophisticated skill invocation: 3-hop decomposition (founder $\to$ film $\to$ writers) with explicit multi-step verification. This level of chained reasoning is absent in Stage~1 traces.
 \end{tcolorbox}
 
-\subsection{Scaling Analysis}
-
-
-% TODO: Scaling analysis discussion
-
 
 %=============================================================================
 \section{Related Work}
@@ -470,6 +460,13 @@ We introduced \ours, a framework that enables the co-evolution of modular skills
 \bibliographystyle{plainnat}
 
 \appendix
+
+\section{Implementation Details}
+\label{app:implementation}
+
+We build on the VeRL framework \citep{sheng2025hybridflow} with Ray-based distributed training on 8$\times$A100 GPUs. For the skill creator pipeline, we use Claude Sonnet 4.5 as the LLM for both the assertion analyzer and skill optimizer. Thompson Sampling uses $\text{Beta}(1,1)$ priors, evolution frequency $K_e = 5$ steps, and exploration bound $\varepsilon_{\text{ts}} = 0.2$. The failure reservoir maintains up to 200 trajectories with 70/30 failure/success stratification.
+
+% TODO: Add detailed hyperparameters table
 
 \section{Trigger Condition Types}
 \label{app:triggers}
