@@ -177,6 +177,7 @@ Unlike classical bandit settings where arm rewards are stationary, the policy $\
     \label{eq:beta_update}
 \end{equation}
 where $M > 0$ is a scalar \emph{memory parameter}. Written as $w_t = 1/(1 + n_t/M)$, the discount interpolates smoothly between full retention ($w_t \to 1$ when $n_t \ll M$) and aggressive forgetting ($w_t \to 0$ when $n_t \gg M$), with the crossover at $n_t = M$ ($w_t = 1/2$). The posterior remains a valid Beta distribution with this multiplicative discount, so Thompson Sampling applies directly. We estimate $M$ from data via sequential predictive-likelihood maximization on completed evaluation cycles (Appendix~\ref{app:staleness_details}), requiring no manual tuning.
+\textcolor{cyan}{Haotian: This selection of $w_{t}$ cannot be principally justified by likelihood or variance-bias trade-off. To justify the choice of this specific form, we can ablation on $w_t = \left( \frac{1}{1 + n_t/M} \right)^{\gamma}$ with different $\gamma$.}
 
 \rparagraph{Accept/Reject Decision}
 At the end of each cycle, the proposed version is accepted if the adaptively-discounted posterior mean of the new arm exceeds that of the old arm:
