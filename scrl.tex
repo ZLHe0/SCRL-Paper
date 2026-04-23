@@ -30,7 +30,7 @@
 
 \input{commands}
 
-\title{\ours: RL-Guided Skill Creator\\for Agentic Skill-Policy Co-Evolution}
+\title{\ours: Skill Creator for Agentic Reinforcement Learning}
 
 \author{%
   Anonymous Authors
@@ -47,6 +47,32 @@
 %=============================================================================
 \section{Introduction}
 %=============================================================================
+
+%---------------------------------------------------------------------
+\subsection*{Version A: Skill Creator-Oriented}
+%---------------------------------------------------------------------
+
+Large language models (LLMs) have enabled autonomous agents that interact with complex environments through multi-turn reasoning and tool use \citep{yao2023react, jimenez2023swe, su2025learnbyinteract}. Recent work has shown that modular \textit{skills}---reusable instruction snippets encoding task-specific strategies---are highly effective as behavioral guidance for such agents, improving both efficiency and adaptability across domains \citep{shinn2023reflexion, zhao2024expel, xia2025skillrl, zhang2026memrl}. Anthropic's Skill Creator \citep{anthropic2025skillcreator} recently pioneered the automation of skill creation through an iterative human-in-the-loop process, where skills are written, blind-tested, and refined based on user feedback (Figure~\ref{fig:intro_comparison}, left panel).
+
+In the absence of human preference data, a growing line of work on agentic reinforcement learning trains agents directly from verifiable environment rewards \citep{jin2025search, xue2025simpletir, shao2024deepseekmath, guo2025deepseek}. A natural question is: \textit{can we build a fully automated Skill Creator that operates within agentic RL training}---replacing human judgment with environment reward signals and enabling the agent to co-evolve its skills alongside its policy? Figure~\ref{fig:intro_comparison} (right panel) illustrates this vision, where the human feedback loop is replaced by the RL training loop itself.
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=\textwidth]{figures/introduction.png}
+\caption{From human-in-the-loop to RL-in-the-loop skill creation. \textbf{Left}: Anthropic's Skill Creator~\citep{anthropic2025skillcreator} iteratively writes skill versions, blind-tests them, and refines based on human feedback. \textbf{Right}: \ours~replaces the human loop with the RL training loop---within each GRPO group, rollouts are split between $\mathcal{V}_{\text{new}}$ and $\mathcal{V}_{\text{old}}$ for controlled comparison, while the same rollouts simultaneously update the policy. Skills and policy co-evolve with zero additional rollouts.}
+\label{fig:intro_comparison}
+\end{figure*}
+
+Despite growing interest, there remains a gap in faithfully integrating the skill creation paradigm with agentic reinforcement learning. Recent approaches, starting with Reflexion \citep{shinn2023reflexion} and followed by ExpeL \citep{zhao2024expel}, MemRL \citep{zhang2026memrl}, and SkillRL \citep{xia2025skillrl}, incrementally accumulate experiential knowledge but lack the key ingredient of the Skill Creator: \textit{controlled, blind comparison} of skill versions under identical conditions. How can we integrate this principled version testing faithfully into the RL training loop---without incurring additional rollout cost?
+
+We propose \ours~(\textbf{S}kill \textbf{C}reator for Agentic \textbf{R}einforcement \textbf{L}earning), which directly adapts the Skill Creator paradigm for agentic RL. Inspired by the Skill Creator's blind testing mechanism, \ours~leverages a structural property of GRPO \citep{shao2024deepseekmath}: each training step samples a group of $G$ rollouts from the same task under the same policy. We split these rollouts \textit{within each group}---some use the candidate skill version $\mathcal{V}_{\text{new}}$, others use the current version $\mathcal{V}_{\text{old}}$---creating a controlled comparison analogous to blind testing, where the only variable is the skill configuration. The allocation is governed by Thompson Sampling \citep{thompson1933likelihood, russo2018tutorial} with an adaptive discount that accounts for the evolving policy. Each rollout thus serves a \textbf{triple role}: (i)~policy optimization via GRPO gradients, (ii)~failure trajectory collection for the skill creator pipeline---which is faithfully adapted from Anthropic's Skill Creator, including assertion-based failure diagnosis and a two-step analyst--author process for versioned skill proposals (\S\ref{sec:skill_creator})---and (iii)~bandit evaluation for principled accept/reject decisions on skill versions. The total rollout count remains identical to standard GRPO; the only overhead is fewer than 30 LLM API calls across a full training run.
+
+We validate \ours~on two diverse agentic benchmarks---multi-hop question answering with search tools and ALFWorld \citep{shridharalfworld}---across two model scales (4B and 8B parameters). \ours~achieves substantial convergence speedup over GRPO and static skill baselines, with strong generalization to unseen tasks. The skill lifecycle analysis (\S\ref{sec:experiments}) shows skills being automatically created, tested, refined, and pruned as the policy improves, demonstrating seamless co-evolution with marginal computational overhead.
+
+
+%---------------------------------------------------------------------
+\subsection*{Version B: RL-First}
+%---------------------------------------------------------------------
 
 Large language models (LLMs) \citep{brown2020language, chung2024scaling} have enabled autonomous agents capable of reasoning, tool use, and multi-turn interaction with complex environments \citep{yao2023react, jimenez2023swe, su2025learnbyinteract}. Reinforcement learning (RL) with verifiable rewards (RLVR) has further advanced these capabilities, enabling agents to discover effective policies through direct environment interaction \citep{shao2024deepseekmath, guo2025deepseek, jin2025search, xue2025simpletir}.
 
@@ -74,14 +100,7 @@ We consider an LLM-based agent with policy $\pi_\theta$ that interacts with an e
 \end{equation}
 
 \subsection{Group Relative Policy Optimization (GRPO)}
-Group Relative Policy Optimization (GRPO) \citep{shao2024deepseekmath} is a policy optimization method that derives from Proximal Policy Optimization (PPO) \citep{schulman2017proximal} and obviates the need for a separate value function, instead using group-wise sampling to estimate the advantage function $\hat{A}$ based on relative performance within a group $G$. For each task $q\sim\mathcal{D}$, GRPO samples a group of trajectories $\{\tau_i\}_{i=1}^G$ from the old policy $\pi_{\theta_{\text{old}}}(\cdot \mid q, \mathcal{S}_{\text{active}}; \mathcal{T})$ and optimizes:
-\begin{equation}
-\begin{aligned}
-&\mathcal{J}_{\text{GRPO}}(\theta) = \mathbb{E}_{\tau \sim \pi_{\text{old}}} \Bigg[ \frac{1}{G} \sum_{i=1}^G \frac{1}{\sum_t \mathcal{I}_{i,t}} \sum_{t=1}^{|\tau_i|}\mathcal{I}_{i,t} \cdot \min \left( \rho_{i,t}\hat{A}_{i}, \text{clip}(\rho_{i,t}, 1{-}\epsilon, 1{+}\epsilon) \hat{A}_{i} \right)  - \beta \mathbb{D}_{\text{KL}} \Bigg],
-\end{aligned}
-\label{eq:grpo}
-\end{equation}
-where $\rho_{i,t}(\theta) = {\pi_\theta(\tau_{i,t}|\tau_{i,<t})}/{\pi_{\theta_{\text{old}}}(\tau_{i,t}|\tau_{i,<t})}$ is the token-level importance ratio, $\hat{A}_i = ({r_i - \text{mean}(\{r_j\}_{j=1}^{G})})/{\text{std}(\{r_j\}_{j=1}^{G})}$ is the group-normalized advantage, $\epsilon$ is the clip ratio, and $\beta$ controls the KL divergence penalty $\mathbb{D}_{\text{KL}}(\pi_\theta \| \pi_{\text{ref}})$ with respect to the reference policy. The indicator $\mathcal{I}_{i,t}$ masks out environment observation tokens so that gradients are computed only over the agent's own tokens \citep{jin2025search, xue2025simpletir}.
+GRPO \citep{shao2024deepseekmath} optimizes the policy without a separate value function by exploiting \textit{group-wise sampling}. For each task $q \sim \mathcal{D}$, GRPO samples a group of $G$ trajectories $\{\tau_i\}_{i=1}^G$ from the current policy $\pi_{\theta}(\cdot \mid q, \mathcal{S}_{\text{active}}; \mathcal{T})$, computes a group-normalized advantage $\hat{A}_i$ from their rewards, and updates $\theta$ via a clipped surrogate objective (details in Appendix~\ref{app:grpo}). The key structural property we exploit is that all $G$ rollouts in a group share the same task input $q$ and the same policy $\pi_\theta$, differing only in their stochastic trajectories. This provides a natural, controlled setting for comparing two skill configurations within the same group (\S\ref{sec:design}).
 
 
 %=============================================================================
@@ -103,7 +122,7 @@ The conventional RLVR approach treats any auxiliary guidance, whether instructio
 
 Recall that each GRPO step samples a group of $G$ rollouts from the same task $q$ under the current policy $\pi_{\theta}$. A key observation is that rollouts within the same group share the same task input and policy, differing only in their stochastic trajectories---this provides a natural, controlled setting for comparing two skill configurations. Rather than splitting across \textit{tasks} (which introduces high variance when the number of episodes is small, as is typical in multi-turn agentic RL, e.g., $G = 16$), we split across \textit{rollouts within each group}: some rollouts use the candidate skill version $\mathcal{V}_{\text{new}}$ while others use the current version $\mathcal{V}_{\text{old}}$, with the allocation determined by Thompson Sampling (\S\ref{sec:skill_evolution}). This within-group split provides a fairly controlled comparison where the only difference is the skill configuration.
 
-Building on this, we design each GRPO rollout to simultaneously serve three purposes: (i)~\textbf{policy optimization}---the reward signals provide the GRPO advantage for updating $\theta$ via Eq.~(\ref{eq:grpo}), which remains the primary purpose of the rollout; (ii)~\textbf{failure collection}---trajectories with $r(\tau) < 1$ are added to a bounded reservoir $\mathcal{R}$, providing the raw material for the skill creator pipeline (\S\ref{sec:skill_creator}); and (iii)~\textbf{skill evaluation}---each rollout's outcome under its assigned skill version updates the Thompson Sampling posteriors for accepting or rejecting the candidate version (\S\ref{sec:skill_evolution}). The skill creation and evolution thus operate entirely within the existing GRPO training loop, with the only additional cost being periodic LLM calls for the skill creator (fewer than 30 API calls across a full training run).
+Building on this, we design each GRPO rollout to simultaneously serve three purposes: (i)~\textbf{policy optimization}---the reward signals provide the GRPO advantage for updating $\theta$, which remains the primary purpose of the rollout; (ii)~\textbf{failure collection}---trajectories with $r(\tau) < 1$ are added to a bounded reservoir $\mathcal{R}$, providing the raw material for the skill creator pipeline (\S\ref{sec:skill_creator}); and (iii)~\textbf{skill evaluation}---each rollout's outcome under its assigned skill version updates the Thompson Sampling posteriors for accepting or rejecting the candidate version (\S\ref{sec:skill_evolution}). The skill creation and evolution thus operate entirely within the existing GRPO training loop, with the only additional cost being periodic LLM calls for the skill creator (fewer than 30 API calls across a full training run).
 
 \subsection{Skill Creator Pipeline}
 \label{sec:skill_creator}
@@ -467,6 +486,18 @@ We introduced \ours, a framework that enables the co-evolution of modular skills
 We build on the VeRL framework \citep{sheng2025hybridflow} with Ray-based distributed training on 8$\times$A100 GPUs. For the skill creator pipeline, we use Claude Sonnet 4.5 as the LLM for both the assertion analyzer and skill optimizer. Thompson Sampling uses $\text{Beta}(1,1)$ priors, evolution frequency $K_e = 5$ steps, and exploration bound $\varepsilon_{\text{ts}} = 0.2$. The failure reservoir maintains up to 200 trajectories with 70/30 failure/success stratification.
 
 % TODO: Add detailed hyperparameters table
+
+\section{GRPO Objective}
+\label{app:grpo}
+
+For completeness, the full GRPO objective \citep{shao2024deepseekmath} is:
+\begin{equation}
+\begin{aligned}
+&\mathcal{J}_{\text{GRPO}}(\theta) = \mathbb{E}_{\tau \sim \pi_{\text{old}}} \Bigg[ \frac{1}{G} \sum_{i=1}^G \frac{1}{\sum_t \mathcal{I}_{i,t}} \sum_{t=1}^{|\tau_i|}\mathcal{I}_{i,t} \cdot \min \left( \rho_{i,t}\hat{A}_{i}, \text{clip}(\rho_{i,t}, 1{-}\epsilon, 1{+}\epsilon) \hat{A}_{i} \right)  - \beta \mathbb{D}_{\text{KL}} \Bigg],
+\end{aligned}
+\label{eq:grpo}
+\end{equation}
+where $\rho_{i,t}(\theta) = {\pi_\theta(\tau_{i,t}|\tau_{i,<t})}/{\pi_{\theta_{\text{old}}}(\tau_{i,t}|\tau_{i,<t})}$ is the token-level importance ratio, $\hat{A}_i = ({r_i - \text{mean}(\{r_j\}_{j=1}^{G})})/{\text{std}(\{r_j\}_{j=1}^{G})}$ is the group-normalized advantage, $\epsilon$ is the clip ratio, and $\beta$ controls the KL divergence penalty $\mathbb{D}_{\text{KL}}(\pi_\theta \| \pi_{\text{ref}})$. The indicator $\mathcal{I}_{i,t}$ masks out environment observation tokens so that gradients are computed only over the agent's own tokens \citep{jin2025search, xue2025simpletir}.
 
 \section{Trigger Condition Types}
 \label{app:triggers}
