@@ -304,13 +304,9 @@ We build on the VeRL framework \citep{sheng2025hybridflow} with Ray-based distri
 
 \begin{figure*}[!t]
 \centering
-\begin{tabular}{@{}ccc@{}}
-\includegraphics[width=0.32\textwidth]{figures/abl_skillrl_val_60.png} &
-\includegraphics[width=0.32\textwidth]{figures/abl_trigger_val_60.png} &
-\includegraphics[width=0.32\textwidth]{figures/abl_sampling_val_60.png}
-\end{tabular}
-\caption{Ablation studies on WebShop validation success rate. Left: \ours~vs SkillRL (static skills). Middle: with vs without trigger conditions. Right: with vs without Thompson Sampling.}
-\label{fig:ablation}
+\includegraphics[width=\textwidth]{figures/ablation_alfworld.png}
+\caption{ALFWorld ablation studies (Val Overall success rate). \textbf{Left}: Sampling strategy---\ours~with Thompson Sampling vs.\ uniform random inclusion vs.\ autoaccept (no A/B testing; crashed at step 60). \textbf{Right}: Evolution frequency---skill creation every 5, 10, or 20 GRPO steps. More frequent evolution (freq=5) converges fastest and reaches the highest final performance.}
+\label{fig:ablation_alfworld}
 \end{figure*}
 
 % TODO: Ablation analysis discussion
@@ -438,16 +434,6 @@ We present representative reasoning traces from the Search domain showing how th
 
 \subsection{Scaling Analysis}
 
-\begin{figure*}[!t]
-\centering
-\begin{tabular}{@{}ccc@{}}
-\includegraphics[width=0.32\textwidth]{figures/webshop_val_sr.png} &
-\includegraphics[width=0.32\textwidth]{figures/webshop_8b_val_sr.png} &
-\includegraphics[width=0.32\textwidth]{figures/webshop_14b_val_sr.png}
-\end{tabular}
-\caption{WebShop validation success rate across model scales: 4B (left), 8B (middle), and 14B (right). \ours's advantage is largest at smaller scales and narrows as model capacity increases, consistent with the intuition that skills compensate most where model capacity is limited.}
-\label{fig:scale}
-\end{figure*}
 
 % TODO: Scaling analysis discussion
 
@@ -595,8 +581,17 @@ ALFWorld  &  76 & 0.79 & 0.54 & 0.41 \\
 \begin{itemize}[itemsep=2pt, leftmargin=*]
     \item $\hat{M}$ differs between domains (457 vs.\ 76), reflecting that Search has slower drift and larger samples while ALFWorld has faster drift and smaller samples.
     \item Within each domain, the adaptive discount automatically differentiates: the minority arm (low~$n_t$, p10) retains 69--79\% of its history, while the majority arm (high~$n_t$, p90) retains only 30--41\%.
-    \item The online estimate $\hat{M}_k$ stabilizes after ${\sim}$10 completed tests (${\sim}$50 training steps). Before that, using no discounting ($M = \infty$) suffices since there is too little data for the discount to materially affect decisions.
+    \item The online estimate $\hat{M}_k$ stabilizes after ${\sim}$10 completed cycles (${\sim}$50 training steps). Before that, using no discounting ($M = \infty$) suffices since there is too little data for the discount to materially affect decisions.
 \end{itemize}
+
+\cref{fig:adaptive_discount} visualizes the per-arm discount weights across the full training runs. Solid lines show the weights computed with the \textit{online} $\hat{M}_k$ (estimated incrementally from completed cycles), while dotted lines show the weights under the \textit{final} $\hat{M}$ (estimated from all data). The two curves diverge slightly in the early cycles---where $\hat{M}$ is still being calibrated---but overlap closely thereafter, demonstrating that the online estimate converges quickly. The two arms' weights are anti-correlated throughout: when Thompson Sampling allocates more episodes to one arm (lowering its $w_t$), the other arm receives fewer episodes (raising its $w_t$). This is the adaptive behavior from \S\ref{sec:skill_evolution}---the minority arm retains more history because its observations are noisier, while the majority arm discounts more aggressively because its observations are more precise.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/adaptive_discount_evolution.png}
+\caption{Per-arm discount weights $w_t = 1/(1 + n_t/\hat{M})$ during training on Search (top) and ALFWorld (bottom). Solid lines use the online $\hat{M}_k$; dotted lines use the final $\hat{M}$ ($457$ for Search, $76$ for ALFWorld). Early divergence reflects the warm-up period before $\hat{M}$ stabilizes; the curves overlap closely after ${\sim}$10 evolution cycles. The two arms' weights are anti-correlated: Thompson Sampling allocates more episodes to the favored arm, lowering its $w_t$ (more forgetting), while the minority arm retains more history. Green/red vertical lines indicate accepted/rejected cycles.}
+\label{fig:adaptive_discount}
+\end{figure*}
 
 
 \end{document}
