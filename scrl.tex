@@ -327,7 +327,7 @@ We compare \ours~against two categories of baselines. \textit{Prompt-based metho
 \begin{figure*}[!t]
 \centering
 \includegraphics[width=\textwidth]{figures/ablation_alfworld.png}
-\caption{ALFWorld ablation studies (Val Overall success rate). \textbf{Left}: Sampling strategy---\ours~with Thompson Sampling vs.\ uniform random inclusion vs.\ autoaccept (no A/B testing; crashed at step 60). \textbf{Right}: Evolution frequency---skill creation every 5, 10, or 20 GRPO steps. More frequent evolution (freq=5) converges fastest and reaches the highest final performance.}
+\caption{Ablation studies on ALFWorld (top) and Search (bottom). \textbf{Left two columns}: Sampling strategy---\ours~with Thompson Sampling vs.\ uniform random vs.\ autoaccept (no A/B testing). \textbf{Right two columns}: Evolution frequency---$K_e{=}5$, 10, or 20 GRPO steps. For each ablation we show Val Overall and Unseen metrics. Thompson Sampling consistently outperforms alternatives across both benchmarks, and more frequent evolution ($K_e{=}5$) converges fastest.}
 \label{fig:ablation_alfworld}
 \end{figure*}
 
