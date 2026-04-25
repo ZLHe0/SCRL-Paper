@@ -235,7 +235,7 @@ The complete procedure for \ours~is provided in Algorithm~\ref{alg:scrl}. Overal
 We evaluate \ours~on two diverse agentic benchmarks: multi-hop question answering with a search tool (NQ + HotpotQA) and ALFWorld \citep{shridharalfworld} (embodied household tasks). We conduct experiments using the Qwen3 model family \citep{bai2023qwen} at two scales: 4B and 8B parameters.
 
 \rparagraph{Baselines}
-We compare \ours~against two categories of baselines. \textit{Prompt-based methods}: zero-shot \textbf{Baseline} (Qwen3-4B-Instruct), and retrieval-augmented variants including \textbf{BM25}, \textbf{HippoRAG}, and \textbf{Long Context} (full trajectory history in context). \textit{RL methods}: \textbf{GRPO}, standard GRPO training with a static instruction and no skills, and \textbf{SkillRL} \citep{xia2025skillrl}, which distills teacher-model skills as static augmentations. We also evaluate ablation variants of \ours~(see \S\ref{sec:ablation}). Implementation details are provided in Appendix~\ref{app:implementation}.
+We compare \ours~against two categories of baselines. \textit{Prompt-based methods}: zero-shot \textbf{Baseline} (Qwen3-4B-Instruct), and retrieval-augmented variants including \textbf{BM25}, \textbf{RAG}, and \textbf{Long Context} (full trajectory history in context). \textit{RL methods}: \textbf{GRPO}, standard GRPO training with a static instruction and no skills, and \textbf{SkillRL} \citep{xia2025skillrl}, which distills teacher-model skills as static augmentations. We also evaluate ablation variants of \ours~(see \S\ref{sec:ablation}). Implementation details are provided in Appendix~\ref{app:implementation}.
 
 \subsection{Main Results}
 
@@ -253,12 +253,12 @@ We compare \ours~against two categories of baselines. \textit{Prompt-based metho
 \cmidrule(lr){3-6} \cmidrule(lr){8-11}
 & Method & P\&P & Trans. & Exam. & Avg && P\&P & Trans. & Exam. & Avg & Overall \\
 \midrule
-\rowcolor{Gray} \multicolumn{12}{c}{\textbf{Qwen3-4B}} \\
+\rowcolor{Gray} \multicolumn{12}{c}{\textbf{Qwen3-4B-Instruct}} \\
 \midrule
 \textit{Baseline} & Zero-shot & 54.7\tpm{0.0} & 28.1\tpm{0.0} & 28.6\tpm{0.0} & 37.1\tpm{0.0} && 30.8\tpm{0.0} & 28.9\tpm{0.0} & 66.7\tpm{0.0} & 32.8\tpm{0.0} & 35.0\tpm{0.0} \\
 \midrule
 \multirow{3}{*}{\textit{w/ Skill}} & BM25 & 46.9\tpm{0.0} & 20.9\tpm{0.0} & 50.0\tpm{0.0} & 35.0\tpm{0.0} && 23.1\tpm{0.0} & 28.9\tpm{0.0} & 66.7\tpm{0.0} & 31.3\tpm{0.0} & 33.2\tpm{0.0} \\
-& HippoRAG & 43.8\tpm{0.0} & 18.5\tpm{0.0} & 64.3\tpm{0.0} & 34.3\tpm{0.0} && 21.2\tpm{0.0} & 43.8\tpm{0.0} & 83.3\tpm{0.0} & 38.1\tpm{0.0} & 36.1\tpm{0.0} \\
+& RAG & 43.8\tpm{0.0} & 18.5\tpm{0.0} & 64.3\tpm{0.0} & 34.3\tpm{0.0} && 21.2\tpm{0.0} & 43.8\tpm{0.0} & 83.3\tpm{0.0} & 38.1\tpm{0.0} & 36.1\tpm{0.0} \\
 & Long Context & 62.5\tpm{0.0} & 48.9\tpm{0.0} & 50.0\tpm{0.0} & 54.3\tpm{0.0} && 28.8\tpm{0.0} & 67.0\tpm{0.0} & 66.7\tpm{0.0} & 51.5\tpm{0.0} & 52.9\tpm{0.0} \\
 \midrule
 \multirow{3}{*}{\textit{w/ RL}} & GRPO & 93.1\tpm{1.2} & 62.5\tpm{5.7} & \textbf{92.3}\tpm{0.0} & 78.6\tpm{3.3} && 84.2\tpm{5.2} & 72.6\tpm{2.7} & 94.4\tpm{9.6} & 78.9\tpm{1.9} & 78.7\tpm{2.6} \\
@@ -280,12 +280,12 @@ We compare \ours~against two categories of baselines. \textit{Prompt-based metho
 \cmidrule(lr){3-5} \cmidrule(lr){7-9}
 & Method & SH & MH & Avg && SH & MH & Avg & Overall \\
 \midrule
-\rowcolor{Gray} \multicolumn{10}{c}{\textbf{Qwen3-4B}} \\
+\rowcolor{Gray} \multicolumn{10}{c}{\textbf{Qwen3-4B-Instruct}} \\
 \midrule
 \textit{Baseline} & Zero-shot & 19.3\tpm{0.0} & 28.7\tpm{0.0} & 24.0\tpm{0.0} && 34.3\tpm{0.0} & 23.7\tpm{0.0} & 28.5\tpm{0.0} & 27.1\tpm{0.0} \\
 \midrule
 \multirow{3}{*}{\textit{w/ Skill}} & BM25 & 25.3\tpm{0.0} & 35.0\tpm{0.0} & 30.2\tpm{0.0} && 44.3\tpm{0.0} & 23.7\tpm{0.0} & 33.1\tpm{0.0} & 32.2\tpm{0.0} \\
-& HippoRAG & 30.7\tpm{0.0} & 36.3\tpm{0.0} & 33.5\tpm{0.0} && 46.6\tpm{0.0} & 22.2\tpm{0.0} & 33.3\tpm{0.0} & 33.4\tpm{0.0} \\
+& RAG & 30.7\tpm{0.0} & 36.3\tpm{0.0} & 33.5\tpm{0.0} && 46.6\tpm{0.0} & 22.2\tpm{0.0} & 33.3\tpm{0.0} & 33.4\tpm{0.0} \\
 & Long Context & 31.7\tpm{0.0} & 34.0\tpm{0.0} & 32.8\tpm{0.0} && 47.8\tpm{0.0} & 24.4\tpm{0.0} & 35.0\tpm{0.0} & 34.3\tpm{0.0} \\
 \midrule
 \multirow{3}{*}{\textit{w/ RL}} & GRPO & 48.0\tpm{0.0} & 52.4\tpm{1.2} & 50.2\tpm{0.6} && 54.7\tpm{0.0} & 31.4\tpm{0.8} & 42.0\tpm{0.5} & 44.6\tpm{0.3} \\
@@ -317,7 +317,7 @@ We compare \ours~against two categories of baselines. \textit{Prompt-based metho
 \begin{figure*}[!t]
 \centering
 \includegraphics[width=\textwidth]{figures/search_skill_lifecycle.png}
-\caption{Skill-policy co-evolution on Search (Qwen3-4B). Left: validation EM accuracy for GRPO (no skills) and \ours, with colored bands marking three stages of skill evolution. Right: key skill operations at each stage. Stage~1 builds a search workflow from scratch (\textcolor[HTML]{2E7D32}{+}~add). Stage~2 adds multi-hop reasoning and resolves design conflicts (\textcolor[HTML]{C62828}{$-$}~delete of internalized skills). Stage~3 refines output formatting and calibrates search depth. Skills are proposed, tested, and accepted or rejected automatically by Thompson Sampling within GRPO rollouts.}
+\caption{Skill-policy co-evolution on Search (Qwen3-4B-Instruct). Left: validation EM accuracy for GRPO (no skills) and \ours, with colored bands marking three stages of skill evolution. Right: key skill operations at each stage. Stage~1 builds a search workflow from scratch (\textcolor[HTML]{2E7D32}{+}~add). Stage~2 adds multi-hop reasoning and resolves design conflicts (\textcolor[HTML]{C62828}{$-$}~delete of internalized skills). Stage~3 refines output formatting and calibrates search depth. Skills are proposed, tested, and accepted or rejected automatically by Thompson Sampling within GRPO rollouts.}
 \label{fig:skill_lifecycle}
 \end{figure*}
 
