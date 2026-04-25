@@ -335,128 +335,6 @@ We compare \ours~against two categories of baselines. \textit{Prompt-based metho
 
 % TODO: Ablation analysis discussion
 
-\subsection{Case Studies: Skill-Guided Reasoning}
-
-We present representative reasoning traces from the Search domain showing how the agent invokes skills at different training stages (color-coded to match \cref{fig:skill_lifecycle}). All traces are verbatim from checkpoint generations.
-
-\definecolor{stage1color}{HTML}{E65100}
-\definecolor{stage2color}{HTML}{00695C}
-\definecolor{stage3color}{HTML}{4A148C}
-\definecolor{successgreen}{HTML}{2E7D32}
-\definecolor{skillcolor}{HTML}{1565C0}
-
-% ── Case 1: Stage 1 ──────────────────────────────────────────────────────
-\begin{tcolorbox}[
-    colback=white, colframe=stage1color, width=\textwidth, sharp corners,
-    boxrule=0.8pt, left=5pt, right=5pt, top=5pt, bottom=5pt,
-    title=\textbf{Case 1 (Stage 1, Step 37): Simple Factual Lookup --- search-first-for-facts + verify-before-answering},
-    fonttitle=\sffamily\small, colbacktitle=stage1color!10, coltitle=black
-]
-\small
-
-\textbf{Task:} \textit{``Who sings let's hear it for the boy?''}
-
-\vspace{4pt}
-\begin{tabularx}{\linewidth}{@{}p{1.0cm} X@{}}
-    \textbf{Step 1} & I am applying the skill: \textbf{\textcolor{skillcolor}{search-first-for-facts}}, because the question requires specific factual information about a song performer, and I must verify this information through external sources before answering. \\
-    & \texttt{<search>who sings lets hear it for the boy</search>} \\
-    \midrule
-    \textbf{Step 2} & I applied the skill: \textbf{\textcolor{skillcolor}{verify-before-answering}}, to ensure the information is explicitly stated in the search results. The results confirm that Deniece Williams is the original singer, featured in the Footloose soundtrack and reaching \#1 on the Billboard Hot 100. \\
-    & \texttt{<answer>Deniece Williams</answer>} \\
-\end{tabularx}
-
-\vspace{3pt}\hrule\vspace{3pt}
-\textbf{\textcolor{successgreen}{Result: SUCCESS}} --- 2-step episode. Search once, verify once, answer. The foundational search-then-verify pattern established in Stage~1.
-\end{tcolorbox}
-
-\vspace{4pt}
-
-% ── Case 2: Stage 1, persist-through-search-difficulties ─────────────────
-\begin{tcolorbox}[
-    colback=white, colframe=stage1color, width=\textwidth, sharp corners,
-    boxrule=0.8pt, left=5pt, right=5pt, top=5pt, bottom=5pt,
-    title=\textbf{Case 2 (Stage 1, Step 11): Search Resilience --- persist-through-search-difficulties},
-    fonttitle=\sffamily\small, colbacktitle=stage1color!10, coltitle=black
-]
-\small
-
-\textbf{Task:} \textit{``Who does Andy end up with in Pretty in Pink?''}
-
-\vspace{4pt}
-\begin{tabularx}{\linewidth}{@{}p{1.0cm} X@{}}
-    \textbf{Step 1} & \texttt{<search>who does andy end up with in pretty in pink</search>} \\
-    \midrule
-    \textbf{Step 2} & I applied the skill: \textbf{\textcolor{skillcolor}{persist-through-search-difficulties}}, because the initial search result is fragmented and does not clearly state who Andy ends up with. The information mentions Blane and Duckie, but it's unclear whether the final outcome is with Blane or Duckie. \textbf{To clarify the final relationship, I need a more precise and direct query.} \\
-    & \texttt{<search>who does andy end up with in pretty in pink movie</search>} \\
-    \midrule
-    \textbf{Step 3} & I applied the skill: \textbf{\textcolor{skillcolor}{verify-before-answering}} [...] The results confirm Andy ends up with Blane. \\
-    & \texttt{<answer>Blane</answer>} \\
-\end{tabularx}
-
-\vspace{3pt}\hrule\vspace{3pt}
-\textbf{\textcolor{successgreen}{Result: SUCCESS}} --- The agent recognizes ambiguous results and reformulates rather than guessing. This skill was later absorbed by \texttt{reformulate-search-strategically} and deleted at step~32.
-\end{tcolorbox}
-
-\vspace{4pt}
-
-% ── Case 3: Stage 2, verify-entity-role-match ────────────────────────────
-\begin{tcolorbox}[
-    colback=white, colframe=stage2color, width=\textwidth, sharp corners,
-    boxrule=0.8pt, left=5pt, right=5pt, top=5pt, bottom=5pt,
-    title=\textbf{Case 3 (Stage 2, Step 179): Role Verification --- verify-entity-role-match},
-    fonttitle=\sffamily\small, colbacktitle=stage2color!10, coltitle=black
-]
-\small
-
-\textbf{Task:} \textit{``Are Thurston Moore and Pharrell Williams both rappers?''}
-
-\vspace{4pt}
-\begin{tabularx}{\linewidth}{@{}p{1.0cm} X@{}}
-    \textbf{Step 1} & \texttt{<search>are Thurston Moore and Pharrell Williams rappers</search>} \\
-    \midrule
-    \textbf{Step 2} & I applied the skill: \textbf{\textcolor{skillcolor}{verify-entity-role-match}} to ensure that both are \textbf{explicitly described as rappers} in the search results. The initial search confirmed that Thurston Moore is a musician and guitarist associated with Sonic Youth, which \textbf{indicates he is not a rapper}. To verify Pharrell Williams' role, I need to confirm if he is described as a rapper. \\
-    & \texttt{<search>is Pharrell Williams a rapper</search>} \\
-    \midrule
-    \textbf{Step 3} & Step~1 confirmed that Thurston Moore is a musician and guitarist, not a rapper. Step~2 confirmed that Pharrell Williams is explicitly described as a rapper, singer, songwriter, and record producer. \textbf{Since only Pharrell Williams is described as a rapper, and Thurston Moore is not}, the answer is no. \\
-    & \texttt{<answer>no</answer>} \\
-\end{tabularx}
-
-\vspace{3pt}\hrule\vspace{3pt}
-\textbf{\textcolor{successgreen}{Result: SUCCESS}} --- The agent checks each entity's \textit{specific role} rather than just confirming name presence. This per-entity role verification emerges in Stage~2 as multi-hop reasoning develops.
-\end{tcolorbox}
-
-\vspace{4pt}
-
-% ── Case 4: Stage 3, require-multi-step-verification ─────────────────────
-\begin{tcolorbox}[
-    colback=white, colframe=stage3color, width=\textwidth, sharp corners,
-    boxrule=0.8pt, left=5pt, right=5pt, top=5pt, bottom=5pt,
-    title=\textbf{Case 4 (Stage 3, Step 287): Multi-hop Decomposition --- require-multi-step-verification},
-    fonttitle=\sffamily\small, colbacktitle=stage3color!10, coltitle=black
-]
-\small
-
-\textbf{Task:} \textit{``The founder of `Black Veil Brides' appears in an upcoming American thriller film written by what two people?''}
-
-\vspace{4pt}
-\begin{tabularx}{\linewidth}{@{}p{1.0cm} X@{}}
-    \textbf{Step 1} & \texttt{<search>Black Veil Brides founder upcoming thriller film writers</search>} \\
-    \midrule
-    \textbf{Step 2} & I applied the skill: \textbf{\textcolor{skillcolor}{require-multi-step-verification}}, to ensure the founder, film, and \textbf{both writers} are explicitly identified. The initial search mentions ``The Veil (2017)'' but does not connect to Black Veil Brides. I will verify the founder's identity first. \\
-    & \texttt{<search>who is the founder of Black Veil Brides</search>} \\
-    \midrule
-    \textbf{Step 3} & Step~1 confirmed Andy Biersack is the founder and lead vocalist, and Step~2 verified his identity. However, there is \textbf{no mention of Andy Biersack appearing in a thriller film}. \\
-    & \texttt{<search>Andy Biersack upcoming American thriller film</search>} \\
-    \midrule
-    \textbf{Step 4} & Step~3 revealed he appears in ``American Satan,'' written by \textbf{Ash Avildsen and Matty Beckerman}. The results explicitly state the film is an American supernatural thriller. \\
-    & \texttt{<answer>Ash Avildsen and Matty Beckerman</answer>} \\
-\end{tabularx}
-
-\vspace{3pt}\hrule\vspace{3pt}
-\textbf{\textcolor{successgreen}{Result: SUCCESS}} --- The most sophisticated skill invocation: 3-hop decomposition (founder $\to$ film $\to$ writers) with explicit multi-step verification. This level of chained reasoning is absent in Stage~1 traces.
-\end{tcolorbox}
-
-
 %=============================================================================
 \section{Related Work}
 \label{sec:related}
@@ -631,5 +509,127 @@ ALFWorld  &  76 & 0.79 & 0.54 & 0.41 \\
 \label{fig:adaptive_discount}
 \end{figure*}
 
+
+\section{Case Studies: Skill-Guided Reasoning}
+\label{app:case_studies}
+
+We present representative reasoning traces from the Search domain showing how the agent invokes skills at different training stages (color-coded to match \cref{fig:skill_lifecycle}). All traces are verbatim from checkpoint generations.
+
+\definecolor{stage1color}{HTML}{E65100}
+\definecolor{stage2color}{HTML}{00695C}
+\definecolor{stage3color}{HTML}{4A148C}
+\definecolor{successgreen}{HTML}{2E7D32}
+\definecolor{skillcolor}{HTML}{1565C0}
+
+% ── Case 1: Stage 1 ──────────────────────────────────────────────────────
+\begin{tcolorbox}[
+    colback=white, colframe=stage1color, width=\textwidth, sharp corners,
+    boxrule=0.8pt, left=5pt, right=5pt, top=5pt, bottom=5pt,
+    title=\textbf{Case 1 (Stage 1, Step 37): Simple Factual Lookup --- search-first-for-facts + verify-before-answering},
+    fonttitle=\sffamily\small, colbacktitle=stage1color!10, coltitle=black
+]
+\small
+
+\textbf{Task:} \textit{``Who sings let's hear it for the boy?''}
+
+\vspace{4pt}
+\begin{tabularx}{\linewidth}{@{}p{1.0cm} X@{}}
+    \textbf{Step 1} & I am applying the skill: \textbf{\textcolor{skillcolor}{search-first-for-facts}}, because the question requires specific factual information about a song performer, and I must verify this information through external sources before answering. \\
+    & \texttt{<search>who sings lets hear it for the boy</search>} \\
+    \midrule
+    \textbf{Step 2} & I applied the skill: \textbf{\textcolor{skillcolor}{verify-before-answering}}, to ensure the information is explicitly stated in the search results. The results confirm that Deniece Williams is the original singer, featured in the Footloose soundtrack and reaching \#1 on the Billboard Hot 100. \\
+    & \texttt{<answer>Deniece Williams</answer>} \\
+\end{tabularx}
+
+\vspace{3pt}\hrule\vspace{3pt}
+\textbf{\textcolor{successgreen}{Result: SUCCESS}} --- 2-step episode. Search once, verify once, answer. The foundational search-then-verify pattern established in Stage~1.
+\end{tcolorbox}
+
+\vspace{4pt}
+
+% ── Case 2: Stage 1, persist-through-search-difficulties ─────────────────
+\begin{tcolorbox}[
+    colback=white, colframe=stage1color, width=\textwidth, sharp corners,
+    boxrule=0.8pt, left=5pt, right=5pt, top=5pt, bottom=5pt,
+    title=\textbf{Case 2 (Stage 1, Step 11): Search Resilience --- persist-through-search-difficulties},
+    fonttitle=\sffamily\small, colbacktitle=stage1color!10, coltitle=black
+]
+\small
+
+\textbf{Task:} \textit{``Who does Andy end up with in Pretty in Pink?''}
+
+\vspace{4pt}
+\begin{tabularx}{\linewidth}{@{}p{1.0cm} X@{}}
+    \textbf{Step 1} & \texttt{<search>who does andy end up with in pretty in pink</search>} \\
+    \midrule
+    \textbf{Step 2} & I applied the skill: \textbf{\textcolor{skillcolor}{persist-through-search-difficulties}}, because the initial search result is fragmented and does not clearly state who Andy ends up with. The information mentions Blane and Duckie, but it's unclear whether the final outcome is with Blane or Duckie. \textbf{To clarify the final relationship, I need a more precise and direct query.} \\
+    & \texttt{<search>who does andy end up with in pretty in pink movie</search>} \\
+    \midrule
+    \textbf{Step 3} & I applied the skill: \textbf{\textcolor{skillcolor}{verify-before-answering}} [...] The results confirm Andy ends up with Blane. \\
+    & \texttt{<answer>Blane</answer>} \\
+\end{tabularx}
+
+\vspace{3pt}\hrule\vspace{3pt}
+\textbf{\textcolor{successgreen}{Result: SUCCESS}} --- The agent recognizes ambiguous results and reformulates rather than guessing. This skill was later absorbed by \texttt{reformulate-search-strategically} and deleted at step~32.
+\end{tcolorbox}
+
+\vspace{4pt}
+
+% ── Case 3: Stage 2, verify-entity-role-match ────────────────────────────
+\begin{tcolorbox}[
+    colback=white, colframe=stage2color, width=\textwidth, sharp corners,
+    boxrule=0.8pt, left=5pt, right=5pt, top=5pt, bottom=5pt,
+    title=\textbf{Case 3 (Stage 2, Step 179): Role Verification --- verify-entity-role-match},
+    fonttitle=\sffamily\small, colbacktitle=stage2color!10, coltitle=black
+]
+\small
+
+\textbf{Task:} \textit{``Are Thurston Moore and Pharrell Williams both rappers?''}
+
+\vspace{4pt}
+\begin{tabularx}{\linewidth}{@{}p{1.0cm} X@{}}
+    \textbf{Step 1} & \texttt{<search>are Thurston Moore and Pharrell Williams rappers</search>} \\
+    \midrule
+    \textbf{Step 2} & I applied the skill: \textbf{\textcolor{skillcolor}{verify-entity-role-match}} to ensure that both are \textbf{explicitly described as rappers} in the search results. The initial search confirmed that Thurston Moore is a musician and guitarist associated with Sonic Youth, which \textbf{indicates he is not a rapper}. To verify Pharrell Williams' role, I need to confirm if he is described as a rapper. \\
+    & \texttt{<search>is Pharrell Williams a rapper</search>} \\
+    \midrule
+    \textbf{Step 3} & Step~1 confirmed that Thurston Moore is a musician and guitarist, not a rapper. Step~2 confirmed that Pharrell Williams is explicitly described as a rapper, singer, songwriter, and record producer. \textbf{Since only Pharrell Williams is described as a rapper, and Thurston Moore is not}, the answer is no. \\
+    & \texttt{<answer>no</answer>} \\
+\end{tabularx}
+
+\vspace{3pt}\hrule\vspace{3pt}
+\textbf{\textcolor{successgreen}{Result: SUCCESS}} --- The agent checks each entity's \textit{specific role} rather than just confirming name presence. This per-entity role verification emerges in Stage~2 as multi-hop reasoning develops.
+\end{tcolorbox}
+
+\vspace{4pt}
+
+% ── Case 4: Stage 3, require-multi-step-verification ─────────────────────
+\begin{tcolorbox}[
+    colback=white, colframe=stage3color, width=\textwidth, sharp corners,
+    boxrule=0.8pt, left=5pt, right=5pt, top=5pt, bottom=5pt,
+    title=\textbf{Case 4 (Stage 3, Step 287): Multi-hop Decomposition --- require-multi-step-verification},
+    fonttitle=\sffamily\small, colbacktitle=stage3color!10, coltitle=black
+]
+\small
+
+\textbf{Task:} \textit{``The founder of `Black Veil Brides' appears in an upcoming American thriller film written by what two people?''}
+
+\vspace{4pt}
+\begin{tabularx}{\linewidth}{@{}p{1.0cm} X@{}}
+    \textbf{Step 1} & \texttt{<search>Black Veil Brides founder upcoming thriller film writers</search>} \\
+    \midrule
+    \textbf{Step 2} & I applied the skill: \textbf{\textcolor{skillcolor}{require-multi-step-verification}}, to ensure the founder, film, and \textbf{both writers} are explicitly identified. The initial search mentions ``The Veil (2017)'' but does not connect to Black Veil Brides. I will verify the founder's identity first. \\
+    & \texttt{<search>who is the founder of Black Veil Brides</search>} \\
+    \midrule
+    \textbf{Step 3} & Step~1 confirmed Andy Biersack is the founder and lead vocalist, and Step~2 verified his identity. However, there is \textbf{no mention of Andy Biersack appearing in a thriller film}. \\
+    & \texttt{<search>Andy Biersack upcoming American thriller film</search>} \\
+    \midrule
+    \textbf{Step 4} & Step~3 revealed he appears in ``American Satan,'' written by \textbf{Ash Avildsen and Matty Beckerman}. The results explicitly state the film is an American supernatural thriller. \\
+    & \texttt{<answer>Ash Avildsen and Matty Beckerman</answer>} \\
+\end{tabularx}
+
+\vspace{3pt}\hrule\vspace{3pt}
+\textbf{\textcolor{successgreen}{Result: SUCCESS}} --- The most sophisticated skill invocation: 3-hop decomposition (founder $\to$ film $\to$ writers) with explicit multi-step verification. This level of chained reasoning is absent in Stage~1 traces.
+\end{tcolorbox}
 
 \end{document}
