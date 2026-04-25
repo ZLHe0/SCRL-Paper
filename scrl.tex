@@ -316,15 +316,8 @@ We compare \ours~against two categories of baselines. \textit{Prompt-based metho
 
 \begin{figure*}[!t]
 \centering
-\includegraphics[width=\textwidth]{figures/alfworld_skill_lifecycle.png}
-\caption{Skill-policy co-evolution on ALFWorld. Left: validation success rate for GRPO and \ours, with colored bands marking two stages of skill evolution. Right: key skill operations at each stage. Stage~1 builds the fundamental task workflow from scratch (\textcolor[HTML]{2E7D32}{+}~add). Stage~2 decomposes the broad workflow into granular navigation and container skills, then prunes skills that the policy has internalized (\textcolor[HTML]{C62828}{$-$}~delete).}
-\label{fig:alfworld_skill_lifecycle}
-\end{figure*}
-
-\begin{figure*}[!t]
-\centering
-\includegraphics[width=\textwidth]{figures/search_skill_lifecycle.png}
-\caption{Skill-policy co-evolution on Search. Left: validation EM accuracy for GRPO and \ours, with colored bands marking three stages of skill evolution. Right: key skill operations at each stage. Stage~1 builds a search workflow from scratch (\textcolor[HTML]{2E7D32}{+}~add). Stage~2 adds multi-hop reasoning and resolves design conflicts (\textcolor[HTML]{C62828}{$-$}~delete of internalized skills). Stage~3 refines output formatting and calibrates search depth.}
+\includegraphics[width=\textwidth]{figures/combined_skill_lifecycle.png}
+\caption{Skill-policy co-evolution on ALFWorld (left) and Search (right). Each pair shows the training curve (with colored stage bands) alongside key skill operations. On ALFWorld, Stage~1 builds the task workflow (\textcolor[HTML]{2E7D32}{+}~add); Stage~2 refines the library with granular navigation skills and prunes internalized ones (\textcolor[HTML]{C62828}{$-$}~delete). On Search, three stages progressively build search foundations, add multi-hop reasoning, and refine precision.}
 \label{fig:skill_lifecycle}
 \end{figure*}
 
