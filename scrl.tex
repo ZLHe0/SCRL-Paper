@@ -58,8 +58,10 @@ In the absence of human preference data, a growing line of work on agentic reinf
 
 \begin{figure*}[!t]
 \centering
-\includegraphics[width=\textwidth]{figures/introduction.png}
-\caption{From human-in-the-loop to RL-in-the-loop skill creation. \textbf{Left}: Anthropic's Skill Creator~\citep{anthropic2025skillcreator} iteratively writes skill versions, blind-tests them, and refines based on human feedback. \textbf{Right}: \ours~replaces the human loop with the RL training loop---within each GRPO group, rollouts are split between $\mathcal{V}_{\text{new}}$ and $\mathcal{V}_{\text{old}}$ for controlled comparison, while the same rollouts simultaneously update the policy. Skills and policy co-evolve with zero additional rollouts.}
+\raisebox{-0.5\height}{\includegraphics[width=0.64\textwidth]{figures/introduction_ver2.png}}%
+\hfill
+\raisebox{-0.5\height}{\includegraphics[width=0.31\textwidth]{figures/intro_right_panel.png}}
+\caption{\textbf{Left two panels}: From human-in-the-loop to RL-in-the-loop skill creation. Anthropic's Skill Creator~\citep{anthropic2025skillcreator} iteratively writes skill versions, blind-tests them, and refines based on human feedback; \ours~replaces the human loop with the RL training loop. \textbf{Right panel}: Compared to existing skill evolution approaches (EvolveR, SkillRL, etc.) that update skills without reward-based evaluation, \ours~dynamically allocates rollouts across skill versions ($\mathcal{V}_{\text{old}}$/$\mathcal{V}_{\text{new}}$) and uses Thompson Sampling to accept or reject changes based on verifiable reward signals.}
 \label{fig:intro_comparison}
 \end{figure*}
 
@@ -78,12 +80,6 @@ Large language models (LLMs) \citep{brown2020language, chung2024scaling} have en
 
 While RL provides a powerful learning signal, each training step is expensive: every GRPO step generates $G$ multi-turn rollouts per question, each involving multiple rounds of model inference and environment interaction. This computational cost motivates maximizing the utility of each rollout, extracting not only policy gradients but also insights about what strategies succeed and fail.
 
-\begin{figure*}[!t]
-\centering
-\includegraphics[width=\textwidth]{figures/introduction_v2.png}
-\caption{Existing skill evolution approaches (left) update skills from model outputs during RL training, but the training reward signals do not inform skill selection---the policy has no mechanism to accept or reject skill changes, and separate rollouts are needed for evaluation. \ours~(right) closes this loop: within each GRPO group, rollouts are split between skill versions $\mathcal{V}_{\text{old}}$ and $\mathcal{V}_{\text{new}}$, and the same reward signals that update the policy also drive principled skill acceptance via Thompson Sampling---zero additional rollouts required.}
-\label{fig:intro_comparison_v2}
-\end{figure*}
 
 A promising direction for improving agent efficiency is \textit{skills}: modular, reusable behavioral patterns that guide agent actions in specific situations. Anthropic's Skill Creator \citep{anthropic2025skillcreator} pioneered the automated creation of such modular skills from agent experience, demonstrating that structured skill libraries can dramatically improve agent capabilities. SkillRL \citep{xia2025skillrl} distills teacher-model knowledge into skill banks that augment RL training. Other approaches accumulate experiential knowledge through verbal reinforcement \citep{shinn2023reflexion} or episodic learning \citep{zhao2024expel}. However, these approaches treat skills as \textit{static} artifacts, created before or outside the RL training loop and then frozen during policy optimization.
 
