@@ -6,6 +6,11 @@ This directory is a **separate git repository** (`SCRL-Paper`) connected to Over
 - Synced with Overleaf via GitHub integration
 - **Do not** track this directory in the parent `agentic_evo_rl` repo (it is gitignored at `docs/manuscript/`)
 
+## Writing Principles
+
+- **Neutral framing over hype.** Use "a natural question arises" not "a compelling question." Let the reader judge importance. 
+- **Avoid dashes (`-`) in prose text.** Use commas, colons, or separate sentences instead.
+
 ## Workflow
 
 - Pull from `origin/main` before editing to pick up Overleaf changes.
