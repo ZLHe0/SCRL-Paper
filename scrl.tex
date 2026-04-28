@@ -30,6 +30,12 @@
 
 \input{commands}
 
+\definecolor{stage1color}{HTML}{E65100}
+\definecolor{stage2color}{HTML}{00695C}
+\definecolor{stage3color}{HTML}{4A148C}
+\definecolor{successgreen}{HTML}{2E7D32}
+\definecolor{skillcolor}{HTML}{1565C0}
+
 \title{\ours: RL-Guided Skill Creator for Agentic Skill-Policy Coevolution}
 
 \author{%
@@ -202,29 +208,31 @@ The complete procedure is summarized in Algorithm~\ref{alg:scrl}. The skill crea
 \label{sec:experiments}
 %=============================================================================
 
+% We investigate four questions: (1)~How does \ours~compare to prompt-based methods, vanilla RL, and static skill augmentation? (2)~Does controlled skill evolution improve generalization to unseen tasks? (3)~What is the contribution of Thompson Sampling and evolution frequency? (4)~How do skills co-evolve with the policy during training?
+
 \subsection{Setup}
 
-\sparagraph{Models and benchmarks}
-We evaluate \ours~on two diverse agentic benchmarks: multi-hop question answering with a search tool (NQ + HotpotQA) and ALFWorld \citep{shridharalfworld} (embodied household tasks). We conduct experiments using the Qwen3 model family \citep{bai2023qwen} at two scales: 4B and 8B parameters. Unless otherwise specified, all results use the 4B model.
+\sparagraph{Environments}
+We conduct primary experiments on two diverse agentic benchmarks. \textit{Search}: agents answer factual questions by iteratively issuing search queries and reasoning over retrieved passages. We train on Natural Questions (NQ, single-hop) and HotpotQA (multi-hop), and evaluate generalization on five unseen datasets: PopQA and TriviaQA (single-hop), and 2WikiMultiHopQA, MuSiQue, and Bamboogle (multi-hop). \textit{ALFWorld} \citep{shridharalfworld}: agents complete embodied household tasks (pick \& place, heat/cool/clean, examine) through text commands, evaluated on both seen and unseen task configurations. To further assess broad applicability, we extend our evaluation to three additional domains: \textit{ScienceWorld} \citep{wang2022scienceworld} (science discovery with in-distribution and out-of-distribution task variants), \textit{InterCode-SQL} \citep{yang2023intercode} (interactive SQL generation across Easy, Hard, and Extra-hard difficulty levels), and \textit{WANDS} \citep{chen2022wands} (web shopping with 2-opt and 3-opt optimization horizons). All experiments use the Qwen3 model family \citep{bai2023qwen} at 4B and 8B scales; unless otherwise specified, results report the 4B model.
 
 \rparagraph{Baselines}
-We compare \ours~against two categories of baselines. \textit{Prompt-based methods}: zero-shot \textbf{Baseline}, and retrieval-augmented variants including \textbf{Retrieval} (BM25), \textbf{RAG} (HippoRAG), and \textbf{Long Context} (full trajectory history in context). \textit{RL methods}: \textbf{GRPO}, standard GRPO training with a static instruction and no skills, and \textbf{SkillRL} \citep{xia2025skillrl}, which distills teacher-model skills as static augmentations. We also evaluate ablation variants of \ours~(see \S\ref{sec:ablation}). Implementation details are provided in Appendix~\ref{app:implementation}.
+We compare \ours~against two categories of baselines. \textit{Prompt-based methods}: zero-shot baseline, and retrieval-augmented variants including \texttt{Retrieval} (BM25), \texttt{RAG} (HippoRAG), and \texttt{Long Context} (full trajectory history in context). \textit{RL methods}: \texttt{GRPO}, standard GRPO training with a static instruction and no skills, and \texttt{SkillRL} \citep{xia2025skillrl}, which distills teacher-model skills as static augmentations. We also evaluate ablation variants of \ours~(see \S\ref{sec:ablation}). Implementation details are provided in Appendix~\ref{app:implementation}.
 
 \subsection{Main Results}
 
 \begin{table*}[!t]
-\caption{Main results (mean\tpm{std} over 3 replicates, \%). ALFWorld groups task types into Pick\&Place (P\&P), Transform (Trans.\ = avg of heat, cool, clean), and Examine (Exam.). Search groups by hop count: single-hop (SH) and multi-hop (MH). Retrieval uses BM25; RAG uses HippoRAG. Best per model scale \textbf{bolded}.}
+\caption{Main results (mean\tpm{std} over 3 replicates, \%). ALFWorld groups task types into Pick\&Place, Transform (avg of heat, cool, clean), and Examine. Search groups by hop count: Single-hop and Multi-hop. Retrieval uses BM25; RAG uses HippoRAG. Best per model scale \textbf{bolded}.}
 \label{tab:main_results}
 \centering
 \scriptsize
-\small
-\setlength{\tabcolsep}{0pt}
-\textbf{ALFWorld} — Task types: Pick\&Place (P\&P), Transform (Trans.\ = avg of heat, cool, clean), Examine (Exam.)\\[2pt]
-\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}ll cccc c cccc c@{}}
+\setlength{\tabcolsep}{4pt}
+\textbf{ALFWorld}\\[2pt]
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{ll cccc c cccc c}
 \toprule
 & & \multicolumn{4}{c}{Seen} && \multicolumn{4}{c}{Unseen} & \\
 \cmidrule(lr){3-6} \cmidrule(lr){8-11}
-& Method & P\&P & Trans. & Exam. & Avg && P\&P & Trans. & Exam. & Avg & Overall \\
+& Method & Pick\&Place & Transform & Examine & Avg && Pick\&Place & Transform & Examine & Avg & Overall \\
 \midrule
 \rowcolor{Gray} \multicolumn{12}{c}{\textbf{Qwen3-4B}} \\
 \midrule
@@ -234,9 +242,9 @@ We compare \ours~against two categories of baselines. \textit{Prompt-based metho
 & RAG & 43.8\tpm{0.0} & 18.5\tpm{0.0} & 64.3\tpm{0.0} & 34.3\tpm{0.0} && 21.2\tpm{0.0} & 43.8\tpm{0.0} & 83.3\tpm{0.0} & 38.1\tpm{0.0} & 36.1\tpm{0.0} \\
 & Long Context & 62.5\tpm{0.0} & 48.9\tpm{0.0} & 50.0\tpm{0.0} & 54.3\tpm{0.0} && 28.8\tpm{0.0} & 67.0\tpm{0.0} & 66.7\tpm{0.0} & 51.5\tpm{0.0} & 52.9\tpm{0.0} \\
 \midrule
-\multirow{2}{*}{\textit{w/ RL}} & GRPO & 93.1\tpm{1.2} & 62.5\tpm{5.7} & \textbf{92.3}\tpm{0.0} & 78.6\tpm{3.3} && 84.2\tpm{5.2} & 72.6\tpm{2.7} & 94.4\tpm{9.6} & 78.9\tpm{1.9} & 78.7\tpm{2.6} \\
-& SkillRL & 88.2\tpm{0.0} & \textbf{85.9}\tpm{0.0} & 61.5\tpm{0.0} & \textbf{85.7}\tpm{0.0} && 68.7\tpm{7.5} & 78.4\tpm{0.8} & \textbf{94.4}\tpm{5.6} & 77.1\tpm{2.8} & 81.5\tpm{1.4} \\
-%& \textbf{\ours} & \textbf{97.9}\tpm{0.0} & \textbf{88.5}\tpm{0.0} & \textbf{92.3}\tpm{0.0} & \textbf{93.6}\tpm{0.0} && \textbf{93.0}\tpm{3.4} & \textbf{93.1}\tpm{4.2} & \textbf{98.1}\tpm{3.2} & \textbf{93.5}\tpm{1.1} & \textbf{93.6}\tpm{0.6} \\
+\multirow{3}{*}{\textit{w/ RL}} & GRPO & \textbf{93.1}\tpm{1.2} & 62.5\tpm{5.7} & \textbf{92.3}\tpm{0.0} & 78.6\tpm{3.3} && 84.2\tpm{5.2} & 72.6\tpm{2.7} & 94.4\tpm{9.6} & 78.9\tpm{1.9} & 78.7\tpm{2.6} \\
+& SkillRL & 88.2\tpm{0.0} & 85.9\tpm{0.0} & 61.5\tpm{0.0} & 85.7\tpm{0.0} && 68.7\tpm{7.5} & 78.4\tpm{0.8} & 94.4\tpm{5.6} & 77.1\tpm{2.8} & 81.5\tpm{1.4} \\
+& \textbf{\ours} & 91.6\tpm{0.0} & \textbf{88.7}\tpm{0.0} & 76.9\tpm{0.0} & \textbf{90.0}\tpm{0.0} && \textbf{87.4}\tpm{2.9} & \textbf{89.6}\tpm{1.9} & \textbf{96.3}\tpm{6.4} & \textbf{89.6}\tpm{0.8} & \textbf{89.8}\tpm{0.4} \\
 \midrule
 \rowcolor{Gray} \multicolumn{12}{c}{\textbf{Qwen3-8B}} \\
 \midrule
@@ -244,15 +252,16 @@ We compare \ours~against two categories of baselines. \textit{Prompt-based metho
 & SkillRL & 95.5\tpm{1.0} & \textbf{83.8}\tpm{2.5} & 87.2\tpm{4.4} & 89.0\tpm{0.4} && 74.0\tpm{5.1} & 79.6\tpm{2.0} & 94.4\tpm{5.6} & 79.9\tpm{2.6} & 84.5\tpm{1.2} \\
 & \textbf{\ours} & \textbf{96.5}\tpm{1.0} & 81.4\tpm{2.2} & \textbf{94.9}\tpm{3.6} & \textbf{90.2}\tpm{0.7} && \textbf{99.3}\tpm{1.0} & \textbf{91.2}\tpm{2.4} & \textbf{100.0}\tpm{0.0} & \textbf{95.3}\tpm{1.3} & \textbf{92.7}\tpm{0.8} \\
 \bottomrule
-\end{tabular*}
+\end{tabular}}%
 \vspace{4pt}
 
-\textbf{Search} — Grouped by hop count: single-hop (SH) and multi-hop (MH)\\[2pt]
-\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}ll ccc c ccc c@{}}
+\textbf{Search}\\[2pt]
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{ll ccc c ccc c}
 \toprule
 & & \multicolumn{3}{c}{Seen} && \multicolumn{3}{c}{Unseen} & \\
 \cmidrule(lr){3-5} \cmidrule(lr){7-9}
-& Method & SH & MH & Avg && SH & MH & Avg & Overall \\
+& Method & Single-hop & Multi-hop & Avg && Single-hop & Multi-hop & Avg & Overall \\
 \midrule
 \rowcolor{Gray} \multicolumn{10}{c}{\textbf{Qwen3-4B}} \\
 \midrule
@@ -272,9 +281,16 @@ We compare \ours~against two categories of baselines. \textit{Prompt-based metho
 & SkillRL & 48.7\tpm{0.0} & 58.1\tpm{0.8} & 53.4\tpm{0.4} && 56.9\tpm{0.0} & 36.3\tpm{0.0} & 45.6\tpm{0.0} & 48.0\tpm{0.1} \\
 & \textbf{\ours} & \textbf{49.0}\tpm{0.0} & \textbf{58.3}\tpm{0.0} & \textbf{53.7}\tpm{0.0} && \textbf{60.4}\tpm{0.2} & \textbf{37.7}\tpm{0.1} & \textbf{48.0}\tpm{0.1} & \textbf{49.8}\tpm{0.1} \\
 \bottomrule
-\end{tabular*}
+\end{tabular}}%
 \vspace{-1mm}
 \end{table*}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=\textwidth]{figures/generalization_bars.png}
+\caption{Generalization to held-out domains: ScienceWorld (science discovery), InterCode-SQL (coding), and WANDS (web shopping). Each sub-category uses an independent y-axis. \ours~consistently matches or outperforms baselines, with the largest gains on out-of-distribution tasks (ScienceWorld Test OOD, SQL Extra).}
+\label{fig:generalization_bars}
+\end{figure*}
 
 \begin{figure*}[!t]
 \centering
@@ -283,19 +299,19 @@ We compare \ours~against two categories of baselines. \textit{Prompt-based metho
 \label{fig:training_curves}
 \end{figure*}
 
-% TODO: Clarify What Score Means
-% TODO: Main results discussion
+Table~\ref{tab:main_results} summarizes performance across benchmarks, model scales, and seen/unseen splits; Figure~\ref{fig:training_curves} shows validation curves during training.
 
-\subsection{Skill Lifecycle Analysis}
+\rparagraph{Consistent Gains Across Benchmarks and Scales}
+\ours~outperforms all baselines on both benchmarks at both model scales. On ALFWorld, \ours~achieves 89.8\% overall at 4B (+11.1\% over GRPO, +8.3\% over SkillRL) and 92.7\% at 8B. On Search, \ours~reaches 48.2\% at 4B (+3.6\% over GRPO) and 49.8\% at 8B. Prompt-based methods, including retrieval-augmented variants, lag substantially behind all RL-trained models.
 
-\begin{figure*}[!t]
-\centering
-\includegraphics[width=\textwidth]{figures/combined_skill_lifecycle.png}
-\caption{Skill-policy co-evolution on ALFWorld (left) and Search (right). Each pair shows the training curve (with colored stage bands) alongside key skill operations. On ALFWorld, Stage~1 builds the task workflow (\textcolor[HTML]{2E7D32}{+}~add); Stage~2 refines the library with granular navigation skills and prunes internalized ones (\textcolor[HTML]{C62828}{$-$}~delete). On Search, three stages progressively build search foundations, add multi-hop reasoning, and refine precision.}
-\label{fig:skill_lifecycle}
-\end{figure*}
+\rparagraph{Static Skill Banks Overfit to Training Distributions}
+The most notable finding concerns generalization. On ALFWorld, SkillRL achieves 85.7\% on seen tasks but only 77.1\% on unseen, \textit{below} GRPO's 78.9\%. This pattern persists at 8B: 89.0\% seen vs.\ 79.9\% unseen for SkillRL, while GRPO reaches 81.6\% unseen. By contrast, \ours~maintains balanced performance across splits: 90.0\%/89.6\% at 4B and 90.2\%/95.3\% at 8B. On Search, the gap is most pronounced on unseen multi-hop tasks, where \ours~outperforms GRPO by 6.4\% and SkillRL by 2.7\% at 4B. Static, teacher-distilled skill banks overfit to training-distribution patterns; controlled, reward-tested evolution produces skills that generalize.
 
-% TODO: Skill lifecycle discussion
+\rparagraph{Broad Applicability}
+To test whether these findings extend beyond our primary benchmarks, we evaluate all methods on three additional domains (Figure~\ref{fig:generalization_bars}): ScienceWorld (science discovery), InterCode-SQL (coding), and WANDS (web shopping). The generalization advantage of \ours~is most striking on challenging splits. On ScienceWorld, \ours~reaches 48.8\% on OOD tasks, more than doubling GRPO (22.2\%) and substantially exceeding SkillRL (26.9\%), whose static skill bank degrades on unseen task variants. On InterCode-SQL, all methods perform comparably on Hard queries, but \ours~pulls ahead on Extra-hard (63.6\% vs.\ 59.0\% GRPO, 55.3\% SkillRL), where compositional SQL reasoning benefits most from evolved skills. WANDS shows consistent gains across both optimization horizons (2-opt, 3-opt), with \ours~reaching 86.6\% on the harder 3-opt setting. The pattern is consistent: evolved, reward-tested skills provide the largest advantage precisely where tasks demand capabilities beyond the training distribution.
+
+\rparagraph{Convergence Dynamics}
+Figure~\ref{fig:training_curves} reveals complementary dynamics. SkillRL's SFT-initialized skill bank provides a fast early advantage, but performance plateaus as the static library conflicts with the evolving policy. \ours~starts without pre-defined skills and initially trails, but sustained co-evolution enables it to overtake SkillRL and reach higher asymptotic performance on both benchmarks. The gap widens on unseen tasks throughout training, consistent with untested skill changes accumulating noise as the policy outgrows the initial skill bank.
 
 \subsection{Ablation Studies}
 \label{sec:ablation}
@@ -307,7 +323,90 @@ We compare \ours~against two categories of baselines. \textit{Prompt-based metho
 \label{fig:ablation_alfworld}
 \end{figure*}
 
-% TODO: Ablation analysis discussion
+Figure~\ref{fig:ablation_alfworld} presents ablation studies on both benchmarks, varying the sampling strategy and evolution frequency.
+
+\rparagraph{Sampling Strategy}
+We compare three allocation mechanisms: Thompson Sampling (default), uniform random assignment, and autoaccept (every proposed version is accepted without A/B testing). Autoaccept causes the most severe degradation: on ALFWorld, performance collapses as untested skill changes accumulate and conflict with the evolving policy. Uniform sampling avoids collapse but converges more slowly than Thompson Sampling, which concentrates rollouts on the more promising version while maintaining sufficient exploration. The consistent gap across both benchmarks confirms that principled evaluation of skill versions, not just their generation, is essential for stable co-evolution.
+
+\rparagraph{Evolution Frequency}
+We vary the evolution cycle length $K_e \in \{5, 10, 20\}$ GRPO steps. More frequent evolution ($K_e{=}5$) converges fastest on both benchmarks. $K_e{=}10$ performs comparably with slightly slower convergence, while $K_e{=}20$ introduces instability, particularly on ALFWorld, where infrequent updates leave stale skills active across too many policy updates. Evolution frequency should be commensurate with the rate of policy change: tighter coupling between skill updates and policy development yields more stable training.
+
+\subsection{Qualitative Analysis}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=\textwidth]{figures/combined_skill_lifecycle.png}
+\caption{Skill-policy co-evolution on ALFWorld (left) and Search (right). Each pair shows the training curve (with colored stage bands) alongside key skill operations. On ALFWorld, Stage~1 builds the task workflow (\textcolor[HTML]{2E7D32}{+}~add); Stage~2 refines the library with granular navigation skills and prunes internalized ones (\textcolor[HTML]{C62828}{$-$}~delete). On Search, three stages progressively build search foundations, add multi-hop reasoning, and refine precision.}
+\label{fig:skill_lifecycle}
+\end{figure*}
+
+\rparagraph{Skill Lifecycle}
+Figure~\ref{fig:skill_lifecycle} annotates key skill operations alongside training curves on both benchmarks. On ALFWorld, Stage~1 builds the foundational task workflow: skills encoding object-location sequencing, repetition avoidance, and failure recovery are added as the policy acquires basic navigation competence; Stage~2 shifts from additions to refinements, with granular sub-procedure skills replacing broader early-stage guidance as the policy internalizes and prunes foundational skills. Search exhibits a finer-grained three-stage progression: search-then-verify foundations (Stage~1), multi-hop reasoning skills such as exhaustive extraction and entity-role matching (Stage~2), and precision skills targeting the remaining failure modes of an already capable agent (Stage~3). On both benchmarks, each stage's skills address failure patterns that emerge only after the policy absorbs the previous stage's guidance, confirming that the creator responds to the policy's evolving failure landscape rather than following a fixed curriculum.
+
+\rparagraph{Case Studies}
+Figure~\ref{fig:case_studies} presents representative reasoning traces. On ALFWorld, [\textcolor{skillcolor}{diagnose-failed-take}] triggers after a failed take action: instead of blind retry, the agent verifies environment state with \texttt{look} before reattempting. On Search, [\textcolor{skillcolor}{require-multi-step-verification}] drives a 3-hop decomposition (founder $\to$ film $\to$ writers), verifying each intermediate result before proceeding. These traces show that evolved skills actively restructure reasoning, from reactive error recovery to systematic decomposition. Additional cases are in Appendix~\ref{app:case_studies}.
+
+\begin{figure*}[!t]
+\centering
+\begin{minipage}[t]{0.44\textwidth}
+\begin{tcolorbox}[
+    colback=white, colframe=black!40, sharp corners,
+    boxrule=0.6pt, left=4pt, right=4pt, top=3pt, bottom=3pt,
+    title={\small\textbf{ALFWorld}},
+    fonttitle=\sffamily\scriptsize, colbacktitle=black!5, coltitle=black,
+    equal height group=casepanels
+]
+\scriptsize
+\textbf{Task:} \textit{``Find two handtowel and put them in toilet.''}
+\vspace{2pt}
+
+\begin{tabularx}{\linewidth}{@{}p{0.7cm} X@{}}
+    \textbf{Step 1} & Handtowel~2 is at handtowelholder~2. \\
+    & \textcolor{black!55}{\texttt{> take handtowel 2 from handtowelholder 2}} \\
+    \midrule
+    \textbf{Step 2} & \textit{Obs: ``Nothing happens.''} Per [\textcolor{skillcolor}{diagnose-failed-take}]: take failed, verify state before retry. \\
+    & \textcolor{black!55}{\texttt{> look}} \\
+    \midrule
+    \textbf{Step 3} & Handtowel~2 confirmed. Retry. \\
+    & \textcolor{black!55}{\texttt{> take handtowel 2 from handtowelholder 2}} \\
+\end{tabularx}
+
+\vspace{2pt}\hrule\vspace{2pt}
+\textbf{\textcolor{successgreen}{\scriptsize\checkmark}} {\scriptsize Look-verify-retry instead of blind retry.}
+\end{tcolorbox}
+\end{minipage}\hfill%
+\begin{minipage}[t]{0.55\textwidth}
+\begin{tcolorbox}[
+    colback=white, colframe=black!40, sharp corners,
+    boxrule=0.6pt, left=4pt, right=4pt, top=3pt, bottom=3pt,
+    title={\small\textbf{Search}},
+    fonttitle=\sffamily\scriptsize, colbacktitle=black!5, coltitle=black,
+    equal height group=casepanels
+]
+\scriptsize
+\textbf{Task:} \textit{``The founder of `Black Veil Brides' appears in a thriller film written by what two people?''}
+\vspace{2pt}
+
+\begin{tabularx}{\linewidth}{@{}p{0.7cm} X@{}}
+    \textbf{Step 1} & \textcolor{black!55}{\texttt{> <search>Black Veil Brides founder thriller</search>}} \\
+    \midrule
+    \textbf{Step 2} & Per [\textcolor{skillcolor}{require-multi-step-verification}]: founder, film, and both writers must be identified. Verify founder first. \\
+    & \textcolor{black!55}{\texttt{> <search>founder of Black Veil Brides</search>}} \\
+    \midrule
+    \textbf{Step 3} & Andy Biersack confirmed. No film mentioned. \\
+    & \textcolor{black!55}{\texttt{> <search>Andy Biersack thriller film</search>}} \\
+    \midrule
+    \textbf{Step 4} & Film: ``American Satan,'' writers identified. \\
+    & \textcolor{black!55}{\texttt{> <answer>Ash Avildsen, Matty Beckerman</answer>}} \\
+\end{tabularx}
+
+\vspace{2pt}\hrule\vspace{2pt}
+\textbf{\textcolor{successgreen}{\scriptsize\checkmark}} {\scriptsize 3-hop: founder $\to$ film $\to$ writers.}
+\end{tcolorbox}
+\end{minipage}
+\caption{Reasoning traces from ALFWorld and Search. Evolved skills ([\textcolor{skillcolor}{blue}]) actively shape the agent's reasoning: error recovery via state verification (left) and multi-hop decomposition (right).}
+\label{fig:case_studies}
+\end{figure*}
 
 %=============================================================================
 \section{Related Work}
@@ -632,13 +731,9 @@ ALFWorld  &  76 & 0.79 & 0.54 & 0.41 \\
 \section{Case Studies: Skill-Guided Reasoning}
 \label{app:case_studies}
 
-We present representative reasoning traces from the Search domain showing how the agent invokes skills at different training stages (color-coded to match \cref{fig:skill_lifecycle}). All traces are verbatim from checkpoint generations.
+We present additional reasoning traces from both domains showing how the agent invokes skills at different training stages (color-coded to match \cref{fig:skill_lifecycle}). All traces are verbatim from checkpoint generations.
 
-\definecolor{stage1color}{HTML}{E65100}
-\definecolor{stage2color}{HTML}{00695C}
-\definecolor{stage3color}{HTML}{4A148C}
-\definecolor{successgreen}{HTML}{2E7D32}
-\definecolor{skillcolor}{HTML}{1565C0}
+\subsection{Search}
 
 % ── Case 1: Stage 1 ──────────────────────────────────────────────────────
 \begin{tcolorbox}[
@@ -749,6 +844,61 @@ We present representative reasoning traces from the Search domain showing how th
 
 \vspace{3pt}\hrule\vspace{3pt}
 \textbf{\textcolor{successgreen}{Result: SUCCESS}} --- The most sophisticated skill invocation: 3-hop decomposition (founder $\to$ film $\to$ writers) with explicit multi-step verification. This level of chained reasoning is absent in Stage~1 traces.
+\end{tcolorbox}
+
+\subsection{ALFWorld}
+
+% ── ALFWorld Case 1: diagnose-failed-take ──────────────────────────────────
+\begin{tcolorbox}[
+    colback=white, colframe=stage2color, width=\textwidth, sharp corners,
+    boxrule=0.8pt, left=5pt, right=5pt, top=5pt, bottom=5pt,
+    title=\textbf{Case 5 (Stage 2, Step 121): Error Recovery --- diagnose-failed-take},
+    fonttitle=\sffamily\small, colbacktitle=stage2color!10, coltitle=black
+]
+\small
+
+\textbf{Task:} \textit{``Find two handtowel and put them in toilet.''}
+
+\vspace{4pt}
+\begin{tabularx}{\linewidth}{@{}p{1.0cm} X@{}}
+    \textbf{Step 12} & I am applying the \textbf{\textcolor{skillcolor}{diagnose-failed-take}} skill because I have just attempted to take a handtowel that is not visible at the current location, and the task requires finding two handtowels. Since I already know that handtowel~2 is visible at handtowelholder~2, I should take it to complete the task. \\
+    & \texttt{take handtowel 2 from handtowelholder 2} \\
+    \midrule
+    \textbf{Step 13} & \textit{Observation: ``Nothing happens.''} I am applying the \textbf{\textcolor{skillcolor}{diagnose-failed-take}} skill because the take action resulted in ``Nothing happens,'' indicating a failed attempt. This skill is specifically designed to handle such failures by first verifying the state of the environment to ensure the object is actually present and then attempting the take action with the correct object name and quantity. \\
+    & \texttt{look} \\
+    \midrule
+    \textbf{Step 14} & Environment confirms handtowel~2 is at handtowelholder~2. Reattempt with verified object state. \\
+    & \texttt{take handtowel 2 from handtowelholder 2} \\
+\end{tabularx}
+
+\vspace{3pt}\hrule\vspace{3pt}
+\textbf{\textcolor{successgreen}{Result: SUCCESS}} --- The skill is invoked in two modes: proactively (step~12, attempting the take) and reactively (step~13, recovering from failure). At step~13, the skill correctly drives a \texttt{look} action to verify environment state before retrying, following the look-verify-retry protocol.
+\end{tcolorbox}
+
+\vspace{4pt}
+
+% ── ALFWorld Case 2: acquire-after-navigation ──────────────────────────────
+\begin{tcolorbox}[
+    colback=white, colframe=stage3color, width=\textwidth, sharp corners,
+    boxrule=0.8pt, left=5pt, right=5pt, top=5pt, bottom=5pt,
+    title=\textbf{Case 6 (Stage 3, Step 132): Navigation-Driven Action --- acquire-after-navigation},
+    fonttitle=\sffamily\small, colbacktitle=stage3color!10, coltitle=black
+]
+\small
+
+\textbf{Task:} \textit{``Cool some bowl and put it in countertop.''}
+
+\vspace{4pt}
+\begin{tabularx}{\linewidth}{@{}p{1.0cm} X@{}}
+    \textbf{Step 17} & I am applying the \textbf{\textcolor{skillcolor}{acquire-after-navigation}} skill because I have just arrived at the fridge and the task requires cooling the bowl. The bowl is already in my possession, and I need to cool it using the fridge. Since the fridge is open and contains relevant items, I should directly cool the bowl. This aligns with the skill's guidance to look for and take the target object if visible. \\
+    & \texttt{cool bowl 1 with fridge 1} \\
+    \midrule
+    \textbf{Step 19} & I am applying the \textbf{\textcolor{skillcolor}{acquire-after-navigation}} skill because I have just arrived at countertop~3 and need to place the cooled bowl. The task requires cooling the bowl and then putting it on the countertop, and I have already cooled the bowl. Since the bowl is already in my inventory and I am at the countertop, I should move it directly. \\
+    & \texttt{move bowl 1 to countertop 3} \\
+\end{tabularx}
+
+\vspace{3pt}\hrule\vspace{3pt}
+\textbf{\textcolor{successgreen}{Result: SUCCESS}} --- The Stage~3 skill \texttt{acquire-after-navigation} triggers on \texttt{go to} actions and teaches the model to immediately act on what it finds at each location. The model adapts the skill's ``look and take'' guidance to also cover placement, applying the same act-immediately-after-navigation principle to both acquiring and placing objects.
 \end{tcolorbox}
 
 \end{document}
