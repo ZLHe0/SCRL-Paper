@@ -47,7 +47,7 @@
 \maketitle
 
 \begin{abstract}
-% TODO: Abstract to be written.
+Agentic reinforcement learning (RL) trains LLM agents from environment rewards, but agents tend to overfit to environment-specific patterns rather than acquiring generalizable strategies. Modular skills can provide environment-specific guidance, yet existing methods treat skill evolution and policy learning as separate processes without reconciling skill changes with the evolving policy. We introduce \ours, a framework that adapts Anthropic's Skill Creator for agentic RL by replacing the human-in-the-loop with the RL training loop. \ours~integrates three mechanisms into GRPO without additional rollouts: (1)~an assertion-driven skill creator that analyzes past experience and builds conditional, trigger-based skills; (2)~within-group rollout sampling that enables controlled comparison of skill versions under identical task and policy conditions; and (3)~Thompson Sampling with adaptive discounting that accounts for policy drift to make principled version control decisions. On benchmarks spanning search, embodied reasoning, coding, web shopping, and science discovery, \ours~consistently outperforms GRPO and existing memory and skill-based methods, with the largest gains on out-of-distribution tasks.
 \end{abstract}
 
 %=============================================================================
@@ -431,9 +431,7 @@ Thompson Sampling \citep{thompson1933likelihood} is a Bayesian approach to the m
 \label{sec:conclusion}
 %=============================================================================
 
-We introduced \ours, a framework that enables the co-evolution of modular skills and policy learning for agentic RL. By integrating an assertion-driven skill creator pipeline with Thompson Sampling-based skill evolution directly into the GRPO training loop, \ours~achieves substantial convergence speedup with zero additional rollouts. The triple-duty design, where each GRPO rollout simultaneously provides policy gradients, failure data for skill creation, and bandit evaluation signals for skill evolution, demonstrates that significant efficiency gains are possible by extracting more value from existing training computation.
-
-% TODO: Expand with specific results and future directions.
+We introduced \ours, a framework that reconciles skill evolution with policy learning for agentic RL. By adapting Anthropic's Skill Creator into the GRPO training loop, \ours~integrates assertion-driven skill creation, within-group controlled comparison under identical task and policy conditions, and Thompson Sampling with adaptive discounting that accounts for policy drift, all without additional rollouts. Across benchmarks spanning search, embodied reasoning, coding, web shopping, and science discovery, \ours~consistently outperforms GRPO and existing memory and skill-based methods, with the largest gains on out-of-distribution tasks where static skill banks degrade. Qualitative analysis confirms that skills are automatically created, tested, refined, and pruned in response to the policy's evolving failure landscape, demonstrating genuine skill-policy co-evolution.
 
 
 \bibliography{refs}
