@@ -242,9 +242,9 @@ We compare \ours~against two categories of baselines. \textit{Prompt-based metho
 & RAG & 43.8\tpm{0.0} & 18.5\tpm{0.0} & 64.3\tpm{0.0} & 34.3\tpm{0.0} && 21.2\tpm{0.0} & 43.8\tpm{0.0} & 83.3\tpm{0.0} & 38.1\tpm{0.0} & 36.1\tpm{0.0} \\
 & Long Context & 62.5\tpm{0.0} & 48.9\tpm{0.0} & 50.0\tpm{0.0} & 54.3\tpm{0.0} && 28.8\tpm{0.0} & 67.0\tpm{0.0} & 66.7\tpm{0.0} & 51.5\tpm{0.0} & 52.9\tpm{0.0} \\
 \midrule
-\multirow{3}{*}{\textit{w/ RL}} & GRPO & \textbf{94.4}\tpm{1.0} & 62.3\tpm{5.9} & \textbf{92.3}\tpm{0.0} & 78.6\tpm{3.3} && 84.6\tpm{5.1} & 72.0\tpm{3.5} & 94.4\tpm{9.6} & 78.9\tpm{1.9} & 78.7\tpm{2.6} \\
+\multirow{3}{*}{\textit{w/ RL}} & GRPO & \textbf{93.8}\tpm{1.0} & 62.3\tpm{5.9} & 53.8\tpm{0.0} & 74.8\tpm{3.2} && 86.2\tpm{3.7} & 72.0\tpm{3.5} & 68.5\tpm{8.5} & 75.9\tpm{4.1} & 75.3\tpm{3.7} \\
 & SkillRL & 89.8\tpm{0.0} & 86.8\tpm{0.0} & 61.5\tpm{0.0} & 85.7\tpm{0.0} && 70.7\tpm{6.5} & 76.4\tpm{0.8} & 94.4\tpm{5.6} & 77.1\tpm{2.8} & 81.5\tpm{1.4} \\
-& \textbf{\ours} & 91.6\tpm{0.0} & \textbf{88.7}\tpm{0.0} & 76.9\tpm{0.0} & \textbf{90.0}\tpm{0.0} && \textbf{87.4}\tpm{2.9} & \textbf{89.6}\tpm{1.9} & \textbf{96.3}\tpm{6.4} & \textbf{89.6}\tpm{0.8} & \textbf{89.8}\tpm{0.4} \\
+& \textbf{\ours} & 91.6\tpm{0.0} & \textbf{88.7}\tpm{0.0} & \textbf{76.9}\tpm{0.0} & \textbf{90.0}\tpm{0.0} && \textbf{87.4}\tpm{2.9} & \textbf{89.6}\tpm{1.9} & \textbf{96.3}\tpm{6.4} & \textbf{89.6}\tpm{0.8} & \textbf{89.8}\tpm{0.4} \\
 \midrule
 \rowcolor{Gray} \multicolumn{12}{c}{\textbf{Qwen3-8B}} \\
 \midrule
@@ -294,15 +294,15 @@ We compare \ours~against two categories of baselines. \textit{Prompt-based metho
 & \textbf{\ours} & \textbf{49.0}\tpm{0.0} & \textbf{58.3}\tpm{0.0} & \textbf{53.7}\tpm{0.0} && \textbf{52.3}\tpm{0.2} & \textbf{68.7}\tpm{0.6} & 47.6\tpm{1.0} & \textbf{22.6}\tpm{1.3} & \textbf{50.4}\tpm{0.0} & \textbf{48.0}\tpm{0.2} & \textbf{49.8}\tpm{0.1} \\
 \bottomrule
 \end{tabular}}%
-\vspace{-1mm}
-\end{table*}
+\vspace{1pt}
 
-\begin{figure*}[!t]
 \centering
 \includegraphics[width=\textwidth]{figures/generalization_bars.png}
-\caption{Generalization to held-out domains: ScienceWorld (science discovery), InterCode-SQL (coding), and WANDS (web shopping). Each sub-category uses an independent y-axis. \ours~consistently matches or outperforms baselines, with the largest gains on out-of-distribution tasks (ScienceWorld Test OOD, SQL Extra).}
+\vspace{-2pt}
+\captionof{figure}{Generalization to held-out domains: ScienceWorld (science), InterCode-SQL (coding), and WANDS (shopping). \ours~consistently matches or outperforms baselines, with the largest gains on OOD tasks.}
 \label{fig:generalization_bars}
-\end{figure*}
+\vspace{-3mm}
+\end{table*}
 
 \begin{figure*}[!t]
 \centering
@@ -314,10 +314,10 @@ We compare \ours~against two categories of baselines. \textit{Prompt-based metho
 Table~\ref{tab:main_results} summarizes performance across benchmarks, model scales, and seen/unseen splits; Figure~\ref{fig:training_curves} shows validation curves during training.
 
 \rparagraph{Consistent Gains Across Benchmarks and Scales}
-\ours~outperforms all baselines on both benchmarks at both model scales. On ALFWorld, \ours~achieves 89.8\% overall at 4B (+11.1\% over GRPO, +8.3\% over SkillRL) and 92.7\% at 8B. On Search, \ours~reaches 47.6\% at 4B (+3.0\% over GRPO) and 49.8\% at 8B. Prompt-based methods, including retrieval-augmented variants, lag substantially behind all RL-trained models.
+\ours~outperforms all baselines on both benchmarks at both model scales. On ALFWorld, \ours~achieves 89.8\% overall at 4B (+14.5\% over GRPO, +8.3\% over SkillRL) and 92.7\% at 8B. On Search, \ours~reaches 47.6\% at 4B (+3.0\% over GRPO) and 49.8\% at 8B. Prompt-based methods, including retrieval-augmented variants, lag substantially behind all RL-trained models.
 
 \rparagraph{Static Skill Banks Overfit to Training Distributions}
-The most notable finding concerns generalization. On ALFWorld, SkillRL achieves 85.7\% on seen tasks but only 77.1\% on unseen, \textit{below} GRPO's 78.9\%. This pattern persists at 8B: 89.0\% seen vs.\ 79.9\% unseen for SkillRL, while GRPO reaches 81.6\% unseen. By contrast, \ours~maintains balanced performance across splits: 90.0\%/89.6\% at 4B and 90.2\%/95.3\% at 8B. On Search, the gap is most pronounced on unseen tasks, where \ours~outperforms GRPO by 3.4\% and SkillRL by 3.0\% at 4B. Static, teacher-distilled skill banks overfit to training-distribution patterns; controlled, reward-tested evolution produces skills that generalize.
+The most notable finding concerns generalization. On ALFWorld, SkillRL achieves 85.7\% on seen tasks but only 77.1\% on unseen, comparable to GRPO's 75.9\%. This pattern persists at 8B: 89.0\% seen vs.\ 79.9\% unseen for SkillRL, while GRPO reaches 81.6\% unseen. By contrast, \ours~maintains balanced performance across splits: 90.0\%/89.6\% at 4B and 90.2\%/95.3\% at 8B. On Search, the gap is most pronounced on unseen tasks, where \ours~outperforms GRPO by 3.4\% and SkillRL by 3.0\% at 4B. Static, teacher-distilled skill banks overfit to training-distribution patterns; controlled, reward-tested evolution produces skills that generalize.
 
 \rparagraph{Broad Applicability}
 To test whether these findings extend beyond our primary benchmarks, we evaluate all methods on three additional domains (Figure~\ref{fig:generalization_bars}): ScienceWorld (science discovery), InterCode-SQL (coding), and WANDS (web shopping). The generalization advantage of \ours~is most striking on challenging splits. On ScienceWorld, \ours~reaches 48.8\% on OOD tasks, more than doubling GRPO (22.2\%) and substantially exceeding SkillRL (26.9\%), whose static skill bank degrades on unseen task variants. On InterCode-SQL, all methods perform comparably on Hard queries, but \ours~pulls ahead on Extra-hard (63.6\% vs.\ 59.0\% GRPO, 55.3\% SkillRL), where compositional SQL reasoning benefits most from evolved skills. WANDS shows consistent gains across both optimization horizons (2-opt, 3-opt), with \ours~reaching 86.6\% on the harder 3-opt setting. The pattern is consistent: evolved, reward-tested skills provide the largest advantage precisely where tasks demand capabilities beyond the training distribution.
