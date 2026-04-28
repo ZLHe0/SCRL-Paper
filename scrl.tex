@@ -48,6 +48,8 @@
 \section{Introduction}
 %=============================================================================
 
+Large language models (LLMs) have enabled autonomous agents capable of reasoning, tool use, and multi-turn interaction with complex environments \citep{yao2023react, jimenez2023swe, su2025learnbyinteract}.
+
 \begin{figure*}[!t]
 \centering
 \includegraphics[width=\textwidth]{figures/intro_figure.pdf}
@@ -55,7 +57,7 @@
 \label{fig:intro_comparison}
 \end{figure*}
 
-Large language models (LLMs) have enabled autonomous agents capable of reasoning, tool use, and multi-turn interaction with complex environments \citep{yao2023react, jimenez2023swe, su2025learnbyinteract}. Agentic reinforcement learning (Agentic RL), where agents are trained directly from verifiable environment rewards through multi-turn interactions, has gained increasing attention as a promising paradigm for developing capable agents \citep{shao2024deepseekmath, guo2025deepseek, jin2025search, xue2025simpletir}. However, agents trained purely through Agentic RL tend to overfit to environment-specific patterns rather than acquiring general problem-solving strategies, limiting their transfer to unseen tasks and domains.
+Agentic reinforcement learning (Agentic RL), where agents are trained directly from verifiable environment rewards through multi-turn interactions, has gained increasing attention as a promising paradigm for developing capable agents \citep{shao2024deepseekmath, guo2025deepseek, jin2025search, xue2025simpletir}. However, agents trained purely through Agentic RL tend to overfit to environment-specific patterns rather than acquiring general problem-solving strategies, limiting their transfer to unseen tasks and domains.
 
 Recent work has shown that modular \textit{skills}, reusable experience snippets that encode task-specific strategies, can greatly facilitate agent problem solving \citep{wang2024awm, cao2025reme, fang2025memp}. A pioneering effort in this direction is Anthropic's Skill Creator \citep{anthropic2025skillcreator}, which automates skill creation through an iterative human-in-the-loop process: skills are written, blind-tested by an independent comparator, and refined based on user feedback (Figure~\ref{fig:intro_comparison}, left panel). A natural question arises: \textit{can we build a fully automated Skill Creator that replaces human judgment with RL reward signals, enabling skills and policy to co-evolve during training?}
 
