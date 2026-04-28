@@ -36,7 +36,7 @@
 \definecolor{successgreen}{HTML}{2E7D32}
 \definecolor{skillcolor}{HTML}{1565C0}
 
-\title{\ours: RL-Guided Skill Creator for Agentic Skill-Policy Coevolution}
+\title{\ours: Reconciling Skill Creation with Policy Learning in Agentic RL}
 
 \author{%
   Anonymous Authors
@@ -67,7 +67,7 @@ Recent work has shown that modular \textit{skills}, reusable experience snippets
 
 Despite growing interest, there remains a significant gap in faithfully integrating the skill creation paradigm with agentic RL. Recent approaches accumulate experiential knowledge through verbal reflection \citep{shinn2023reflexion}, episodic extraction \citep{zhao2024expel}, memory evolution \citep{zhang2026memrl}, or teacher distillation \citep{xia2025skillrl}, but none adopt the key ingredient of the Skill Creator: \textit{controlled, blind comparison} of skill versions under identical conditions. These methods accept whatever skills are generated without principled evaluation, treating skill creation and policy learning as separate processes rather than considering how the evolving policy digests and reconciles with changing skills (Figure~\ref{fig:intro_comparison}, right panel). The optimal skill set is not static: as the policy improves, previously helpful skills can become redundant or even harmful, and new failure modes emerge that require different guidance \citep{soylu-etal-2024-fine, liu2025understanding}.
 
-We propose \ours, an RL-Guided Skill Creator that directly adapts the Skill Creator paradigm for agentic RL. Inspired by the blind testing mechanism of Anthropic's Skill Creator, \ours~leverages a structural property of GRPO \citep{shao2024deepseekmath}: each training step samples a group of $G$ rollouts from the same task under the same policy. We split these rollouts \textit{within each group}, where some use the candidate skill version $\mathcal{V}_{\text{new}}$ and others use the current version $\mathcal{V}_{\text{old}}$, creating a controlled comparison analogous to blind testing where the only variable is the skill configuration. The allocation is governed by Thompson Sampling \citep{thompson1933likelihood, russo2018tutorial} with an adaptive discount that accounts for the evolving policy. Each rollout thus serves a \textbf{triple role}: (i)~policy optimization via GRPO gradients, (ii)~failure trajectory collection for the skill creator pipeline, which is faithfully adapted from Anthropic's Skill Creator with assertion-based failure diagnosis and a two-step analyst/author process for versioned skill proposals (\S\ref{sec:skill_creator}), and (iii)~bandit evaluation for principled accept/reject decisions on skill versions. The total rollout count remains identical to standard GRPO; the only additional cost is periodic LLM calls for the skill creator, which constitute negligible overhead relative to rollout generation.
+We propose \ours, a framework that reconciles skill creation with policy learning by adapting the Skill Creator paradigm for agentic RL. Inspired by the blind testing mechanism of Anthropic's Skill Creator, \ours~leverages a structural property of GRPO \citep{shao2024deepseekmath}: each training step samples a group of $G$ rollouts from the same task under the same policy. We split these rollouts \textit{within each group}, where some use the candidate skill version $\mathcal{V}_{\text{new}}$ and others use the current version $\mathcal{V}_{\text{old}}$, creating a controlled comparison analogous to blind testing where the only variable is the skill configuration. The allocation is governed by Thompson Sampling \citep{thompson1933likelihood, russo2018tutorial} with an adaptive discount that accounts for the evolving policy. Each rollout thus serves a \textbf{triple role}: (i)~policy optimization via GRPO gradients, (ii)~failure trajectory collection for the skill creator pipeline, which is faithfully adapted from Anthropic's Skill Creator with assertion-based failure diagnosis and a two-step analyst/author process for versioned skill proposals (\S\ref{sec:skill_creator}), and (iii)~bandit evaluation for principled accept/reject decisions on skill versions. The total rollout count remains identical to standard GRPO; the only additional cost is periodic LLM calls for the skill creator, which constitute negligible overhead relative to rollout generation.
 
 We thoroughly investigate \ours~on search and embodied reasoning benchmarks across multiple model scales, and further extend it to coding, web shopping, and science discovery tasks. \ours~achieves substantial convergence speedup over GRPO and static skill baselines, with strong generalization to unseen tasks. The skill lifecycle analysis (\S\ref{sec:experiments}) shows skills being automatically created, tested, refined, and pruned as the policy improves, demonstrating seamless co-evolution with marginal computational overhead.
 
@@ -89,7 +89,7 @@ GRPO \citep{shao2024deepseekmath} optimizes the policy without a separate value 
 
 
 %=============================================================================
-\section{RL-Guided Skill Creation (\ours)}
+\section{Reconciling Skill Creation with Policy Learning}
 \label{sec:method}
 %=============================================================================
 
