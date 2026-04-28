@@ -63,7 +63,7 @@ Recent work has shown that modular \textit{skills}, reusable experience snippets
 
 Despite growing interest, there remains a significant gap in faithfully integrating the skill creation paradigm with agentic RL. Recent approaches accumulate experiential knowledge through verbal reflection \citep{shinn2023reflexion}, episodic extraction \citep{zhao2024expel}, memory evolution \citep{zhang2026memrl}, or teacher distillation \citep{xia2025skillrl}, but none adopt the key ingredient of the Skill Creator: \textit{controlled, blind comparison} of skill versions under identical conditions. These methods accept whatever skills are generated without principled evaluation, treating skill creation and policy learning as separate processes rather than considering how the evolving policy digests and reconciles with changing skills (Figure~\ref{fig:intro_comparison}, right panel). The optimal skill set is not static: as the policy improves, previously helpful skills can become redundant or even harmful, and new failure modes emerge that require different guidance \citep{soylu-etal-2024-fine, liu2025understanding}.
 
-We propose \ours, an RL-Guided Skill Creator that directly adapts the Skill Creator paradigm for agentic RL. Inspired by the blind testing mechanism of Anthropic's Skill Creator, \ours~leverages a structural property of GRPO \citep{shao2024deepseekmath}: each training step samples a group of $G$ rollouts from the same task under the same policy. We split these rollouts \textit{within each group}, where some use the candidate skill version $\mathcal{V}_{\text{new}}$ and others use the current version $\mathcal{V}_{\text{old}}$, creating a controlled comparison analogous to blind testing where the only variable is the skill configuration. The allocation is governed by Thompson Sampling \citep{thompson1933likelihood, russo2018tutorial} with an adaptive discount that accounts for the evolving policy. Each rollout thus serves a \textbf{triple role}: (i)~policy optimization via GRPO gradients, (ii)~failure trajectory collection for the skill creator pipeline, which is faithfully adapted from Anthropic's Skill Creator with assertion-based failure diagnosis and a two-step analyst/author process for versioned skill proposals (\S\ref{sec:skill_creator}), and (iii)~bandit evaluation for principled accept/reject decisions on skill versions. The total rollout count remains identical to standard GRPO; the only overhead is fewer than 30 LLM API calls across a full training run.
+We propose \ours, an RL-Guided Skill Creator that directly adapts the Skill Creator paradigm for agentic RL. Inspired by the blind testing mechanism of Anthropic's Skill Creator, \ours~leverages a structural property of GRPO \citep{shao2024deepseekmath}: each training step samples a group of $G$ rollouts from the same task under the same policy. We split these rollouts \textit{within each group}, where some use the candidate skill version $\mathcal{V}_{\text{new}}$ and others use the current version $\mathcal{V}_{\text{old}}$, creating a controlled comparison analogous to blind testing where the only variable is the skill configuration. The allocation is governed by Thompson Sampling \citep{thompson1933likelihood, russo2018tutorial} with an adaptive discount that accounts for the evolving policy. Each rollout thus serves a \textbf{triple role}: (i)~policy optimization via GRPO gradients, (ii)~failure trajectory collection for the skill creator pipeline, which is faithfully adapted from Anthropic's Skill Creator with assertion-based failure diagnosis and a two-step analyst/author process for versioned skill proposals (\S\ref{sec:skill_creator}), and (iii)~bandit evaluation for principled accept/reject decisions on skill versions. The total rollout count remains identical to standard GRPO; the only additional cost is periodic LLM calls for the skill creator, which constitute negligible overhead relative to rollout generation.
 
 We thoroughly investigate \ours~on search and embodied reasoning benchmarks across multiple model scales, and further extend it to coding, web shopping, and science discovery tasks. \ours~achieves substantial convergence speedup over GRPO and static skill baselines, with strong generalization to unseen tasks. The skill lifecycle analysis (\S\ref{sec:experiments}) shows skills being automatically created, tested, refined, and pruned as the policy improves, demonstrating seamless co-evolution with marginal computational overhead.
 
@@ -89,78 +89,73 @@ GRPO \citep{shao2024deepseekmath} optimizes the policy without a separate value 
 \label{sec:method}
 %=============================================================================
 
-The conventional RLVR approach treats any auxiliary guidance, whether instructions \citep{zhou2025inspo} or skills \citep{xia2025skillrl}, as a static, pre-defined input. This constrains the agent's exploration and may result in suboptimal convergence, as the ideal guidance changes with the evolving policy. \ours~re-frames skill design as a \textit{dynamic} and \textit{integral} component of the RL loop, enabling skills and policy to co-evolve online without any additional rollouts. The key observation is that standard GRPO rollouts already provide all the signal needed: we describe this \textit{triple-duty} design in \S\ref{sec:design}, then detail the two components it connects---the skill creator pipeline (\S\ref{sec:skill_creator}) and the Thompson Sampling-based skill evolution mechanism (\S\ref{sec:skill_evolution}).
+Recent memory and skill-based approaches already update auxiliary guidance during training, whether through instruction population evolution \citep{zhou2025inspo}, episodic extraction \citep{zhao2024expel}, or teacher distillation \citep{xia2025skillrl}. Yet a key idea from Anthropic's Skill Creator \citep{anthropic2025skillcreator} remains under-explored in this literature: \textit{controlled, blind testing} that ensures only genuinely helpful modifications are retained. Without such testing, skill libraries accumulate untested changes whose individual effects are never isolated, making it impossible to distinguish beneficial guidance from noise. The central challenge in bringing blind testing into agentic RL is that the policy itself is non-stationary: a skill version that outperforms today may be evaluated against a different policy tomorrow, conflating skill quality with policy drift.
+
+\ours~addresses this by integrating skill creation, evaluation, and evolution directly into the GRPO training loop. We first describe the within-group rollout splitting that enables controlled skill comparison and the triple-duty design that makes it cost-free (\S\ref{sec:design}), then detail the skill creator pipeline that proposes versioned changes (\S\ref{sec:skill_creator}), and finally the Thompson Sampling mechanism that governs version evaluation under non-stationarity (\S\ref{sec:skill_evolution}).
 
 
-\subsection{Triple-Duty Rollouts: Connecting Skill Creation and Evolution}
+\subsection{Within-Group Skill Comparison and Triple-Duty Rollouts}
 \label{sec:design}
 
-Recall that each GRPO step samples a group of $G$ rollouts from the same task $q$ under the current policy $\pi_{\theta}$. A key observation is that rollouts within the same group share the same task input and policy, differing only in their stochastic trajectories---this provides a natural, controlled setting for comparing two skill configurations. Rather than splitting across \textit{tasks} (which introduces high variance when the number of episodes is small, as is typical in multi-turn agentic RL, e.g., $G = 16$), we split across \textit{rollouts within each group}: some rollouts use the candidate skill version $\mathcal{V}_{\text{new}}$ while others use the current version $\mathcal{V}_{\text{old}}$, with the allocation determined by Thompson Sampling (\S\ref{sec:skill_evolution}). This within-group split provides a fairly controlled comparison where the only difference is the skill configuration.
+Blind testing requires comparing two skill configurations under identical conditions. In agentic RL, a natural comparison unit is the task: run one group under $\mathcal{V}_{\text{new}}$ and another under $\mathcal{V}_{\text{old}}$. However, multi-turn rollouts are expensive and group sizes are modest, so splitting across \textit{tasks} introduces high variance from task difficulty alone. We instead split across \textit{rollouts within each group}: all $G$ rollouts share the same task $q$ and the same policy $\pi_\theta$, so the only variable is the skill configuration. This is analogous to the within-subject design in controlled experiments, where each subject (task) serves as its own control.
 
-Building on this, we design each GRPO rollout to simultaneously serve three purposes: (i)~\textbf{policy optimization}---the reward signals provide the GRPO advantage for updating $\theta$, which remains the primary purpose of the rollout; (ii)~\textbf{failure collection}---trajectories with $r(\tau) < 1$ are added to a bounded reservoir $\mathcal{R}$, providing the raw material for the skill creator pipeline (\S\ref{sec:skill_creator}); and (iii)~\textbf{skill evaluation}---each rollout's outcome under its assigned skill version updates the Thompson Sampling posteriors for accepting or rejecting the candidate version (\S\ref{sec:skill_evolution}). The skill creation and evolution thus operate entirely within the existing GRPO training loop, with the only additional cost being periodic LLM calls for the skill creator (fewer than 30 API calls across a full training run).
+Concretely, for each rollout $i$ in a group, a version assignment $d_i$ is drawn from the Thompson Sampling posterior (\S\ref{sec:skill_evolution}), and the rollout is generated under the corresponding skill set $\mathcal{S}_{d_i}$. The \ours~objective extends the standard GRPO formulation (Appendix~\ref{app:grpo}) as:
+\begin{equation}
+\begin{aligned}
+\mathcal{J}_{\text{\ours}}(\theta) = \mathbb{E}_{q \sim \mathcal{D},\; \textcolor{ourblue}{d_i \sim \mathrm{TS}(\alpha, \beta)},\; \tau_i \sim \pi_{\theta_{\text{old}}}(\cdot \mid q,\, \textcolor{ourblue}{\mathcal{S}_{d_i}};\, \mathcal{T})} \left[ \mathcal{L}_{\text{GRPO}}(\theta;\, \{\tau_i\}_{i=1}^G) \right],
+\end{aligned}
+\label{eq:scrl_objective}
+\end{equation}
+where the \textcolor{ourblue}{blue} terms denote the components introduced by \ours: $\textcolor{ourblue}{d_i \sim \mathrm{TS}(\alpha, \beta)}$ assigns each rollout to either $\mathcal{V}_{\text{new}}$ or $\mathcal{V}_{\text{old}}$ via Thompson Sampling, and $\textcolor{ourblue}{\mathcal{S}_{d_i}}$ is the active skill set under the assigned version. This contrasts with approaches like INSPO \citep{zhou2025inspo}, which sample one instruction per group (all $G$ rollouts share it); \ours~instead varies the skill configuration \textit{within} the group, enabling controlled comparison at the rollout level.
+
+This formulation means each rollout simultaneously serves three purposes without additional cost: its reward provides GRPO gradients for policy optimization (the primary purpose), failed trajectories ($r(\tau) < 1$) feed a bounded reservoir $\mathcal{R}$ that drives the skill creator (\S\ref{sec:skill_creator}), and its outcome under the assigned version updates the Thompson Sampling posteriors for the accept/reject decision (\S\ref{sec:skill_evolution}). The total rollout count remains identical to standard GRPO; the only overhead is periodic LLM calls for the skill creator, which constitute negligible cost relative to rollout generation.
 
 \subsection{Skill Creator Pipeline}
 \label{sec:skill_creator}
 
-We first define the \textit{skill module} as the atomic unit of guidance in \ours. A skill $S_k = (c_k, \text{trig}_k)$ consists of content $c_k$ (a structured instruction snippet) and a trigger condition $\text{trig}_k$ that determines when the skill activates during a rollout. Trigger conditions are parameterized by type and pattern, allowing the skill optimizer to choose from several activation modes (e.g., every step, only at the beginning, or only when a specific action pattern is observed). The skill bank $\mathcal{S} = \{S_1, \ldots, S_K\}$ collects all active skills. Skills are \textit{modular}: each targets a specific failure mode and activates only when its trigger condition is met, enabling compositional guidance without prompt bloat.
+The within-group split provides the evaluation mechanism; this section describes what it evaluates. Following the Skill Creator workflow \citep{anthropic2025skillcreator}, we adapt its diagnosis-proposal-validation loop for fully automated use within the RL training loop. Each rollout from \S\ref{sec:design} is already tagged with its version assignment $d_i$ and reward; failed trajectories ($r(\tau) < 1$) enter the bounded reservoir $\mathcal{R}$, providing the raw material for diagnosis.
 
-The skill creator pipeline adapts the Skill Creator paradigm, originally designed for human-in-the-loop development, for automated use within RL training. The input is failed GRPO rollouts collected over time into a bounded failure reservoir $\mathcal{R}$. The pipeline operates in three stages, triggered periodically (every $K_e$ GRPO steps) when the system is not already testing a candidate skill.
+\rparagraph{Assertion-Based Failure Grading}
+Binary task reward indicates \textit{whether} a trajectory failed but not \textit{how}. Skill Creator addresses this with per-test-case LLM grading, but at the scale of hundreds of reservoir episodes, per-trajectory LLM diagnosis is prohibitive. We instead maintain a dynamic assertion set $\mathcal{A} = \{\phi_j\}$, where each assertion $\phi_j = (\text{check}_j, \text{params}_j)$ is a rule-based predicate over trajectories. These assertions function as multi-aspect rubrics: they decompose binary reward into structured, per-aspect pass rates $\hat{r}_j$ that quantify the prevalence of specific behavioral patterns across $\mathcal{R}$, entirely without LLM calls. An LLM-based \textit{analyzer} $\mathcal{Z}$ then receives the pass rates alongside a stratified sample of trajectories and produces a prevalence-ranked failure diagnosis $\mathcal{F}_{\text{diag}}$. Critically, the analyzer also evolves the assertion set $\mathcal{A}$ itself via add, delete, and modify operations: adding checks for newly observed failure modes, removing non-discriminating assertions, and refining parameters as the policy's failure landscape shifts. Full assertion types and evolution mechanics are detailed in Appendix~\ref{app:skill_pipeline}.
 
-\rparagraph{Assertion Grading and Analysis}
-The assertion grader $\mathcal{G}$ maintains a dynamic set of rule-based assertions $\mathcal{A} = \{\phi_j\}$, where each assertion $\phi_j = (\text{check}_j, \text{params}_j)$ is a predicate over trajectories (e.g., \texttt{action\_exists}, \texttt{action\_before}, \texttt{final\_action}). Given the failure reservoir $\mathcal{R}$, the grader evaluates every trajectory against all assertions, producing per-assertion pass rates $\hat{r}_j = |\mathcal{R}|^{-1} \sum_{\tau \in \mathcal{R}} \mathbf{1}[\text{check}_j(\tau, \text{params}_j)]$ that quantify the prevalence of specific behavioral patterns. The grader is entirely rule-based with no LLM calls.
+\rparagraph{Version Proposals from Failure Diagnosis}
+Given $\mathcal{F}_{\text{diag}}$, a skill creator agent proposes a candidate \textit{version} $\mathcal{V}_{\text{new}}$: a coherent set of operations on the skill bank $\mathcal{S} = \{S_1, \ldots, S_K\}$ ($K \leq K_{\max}$), each of type \textsc{add}, \textsc{modify}, or \textsc{delete}. The agent receives the current skill bank, the failure diagnosis with selected representative episodes, and the history of prior version proposals with their accept/reject outcomes from Thompson Sampling (\S\ref{sec:skill_evolution}). This version history replaces human feedback as the cross-cycle learning signal: rejected versions and their A/B outcomes inform future proposals, preventing the agent from repeating failed strategies. Additions target unaddressed failure patterns from $\mathcal{F}_{\text{diag}}$; modifications refine skills whose guidance contradicts successful behavior observed in $\mathcal{R}$; deletions remove skills the policy has internalized. Proposing at the version level ensures the A/B test evaluates a self-consistent set of changes rather than an isolated addition. Implementation details of the internal agent decomposition are provided in Appendix~\ref{app:skill_pipeline}.
 
-An LLM-based assertion analyzer $\mathcal{Z}$ then receives the pass rates, a stratified sample of trajectories from $\mathcal{R}$, and a summary of the current skill bank $\mathcal{S}$. The analyzer \textit{evolves the assertion set} $\mathcal{A}$ via operations (add, delete, modify), adapting the diagnostic criteria to the current policy's failure landscape. It also produces a \textit{failure diagnosis} $\mathcal{F}_{\text{diag}}$ with prevalence-ranked patterns and selects representative episodes $\mathcal{E}_{\text{sel}}$ for the skill optimizer.
+\rparagraph{Conditional Triggers and Selective Loading}
+Each skill $S_k = (c_k, \text{trig}_k)$ pairs structured content $c_k$ (situational applicability, action guidance, and counterexamples) with a deterministic trigger condition $\text{trig}_k$. Triggers are parameterized by type: \textit{general} (fires every step), \textit{beginning} (fires at episode start only), or \textit{action-pattern} (fires when the previous action matches a regex pattern). At each step $t$, only skills whose triggers fire on the current context are injected into the prompt. Among triggered skills, the agent further selects based on each skill's \texttt{when\_to\_use} field, which describes its situational applicability: the deterministic trigger gates context injection, while the model's own judgment gates adoption. This two-level filter ensures targeted guidance without inflating every prompt. Proposed triggers are validated against the reservoir before entering A/B testing: the pipeline estimates each trigger's firing rate over reservoir episodes, and proposals falling below a minimum threshold are rejected and rewritten, ensuring sufficient activation coverage for meaningful evaluation (Appendix~\ref{app:triggers}).
 
-\rparagraph{Skill Version Creation}
-Rather than proposing a single skill in isolation, the creation pipeline generates a new \textit{version} of the skill library through a two-step analyst--author process. An LLM-based \textit{version analyst} $\mathcal{Z}_v$ receives the failure diagnosis $\mathcal{F}_{\text{diag}}$, the selected episodes $\mathcal{E}_{\text{sel}}$, the current skill bank $\mathcal{S}$, the history of previous version proposals and their accept/reject outcomes, and action-pattern frequency statistics from recent rollouts. It produces a \textit{change plan} $\mathcal{P}$: a set of 1--3 operations, each of type \textsc{add} (introduce a new skill), \textsc{modify} (refine an existing skill's content or trigger), or \textsc{delete} (remove an obsolete or harmful skill). The analyst prioritizes unaddressed failure patterns for additions, refines skills whose guidance contradicts successful behavior for modifications, and removes skills that the policy has internalized or that conflict with current performance for deletions. The total number of active skills is capped at $K_{\max}$ after all operations.
-
-An LLM-based \textit{version author} $\mathcal{O}_v$ then executes the change plan $\mathcal{P}$, writing concrete skill content, trigger conditions, and grounded examples for each operation. For any \textsc{add} operation, the proposed skill must pass a \textit{trigger rate gate}: $\hat{p}_{\text{trigger}} \geq \delta$ (default $\delta = 0.1$), ensuring testability within a reasonable number of episodes. The resulting set of operations defines a candidate version $\mathcal{V}_{\text{new}}$ of the skill library.
-
-\rparagraph{Trigger-Based Skill Injection}
-At each step $t$ of a multi-turn episode, the trigger matcher determines which skills from the active version are injected into the prompt. Each skill's trigger condition $\text{trig}_k$ is a predicate over the current step index and the previous action:
-\begin{equation}
-    \mathcal{S}_{\text{active}}^{(t)} = \{S_k \in \mathcal{S} : \text{trig}_k(t, a_{t-1}) = 1\}.
-    \label{eq:trigger}
-\end{equation}
-This per-step trigger mechanism allows different skills to activate at different moments within a single episode, providing targeted guidance without inflating every prompt. The specific trigger types and their semantics are detailed in Appendix~\ref{app:triggers}.
+The creator proposes a candidate version $\mathcal{V}_{\text{new}}$; it remains to determine how rollouts are allocated between $\mathcal{V}_{\text{new}}$ and $\mathcal{V}_{\text{old}}$, and when to accept or reject.
 
 
 \subsection{RL-Guided Skill Evolution with Thompson Sampling}
 \label{sec:skill_evolution}
 
-As described in \S\ref{sec:design}, rollouts within each GRPO group are split between the candidate version $\mathcal{V}_{\text{new}}$ and the current version $\mathcal{V}_{\text{old}}$. The skill evolution operates in \textit{cycles} of $K_e$ training steps: at the start of each cycle, the creator pipeline (\S\ref{sec:skill_creator}) proposes a candidate version; the within-group split then evaluates it over $K_e$ steps; at the end of the cycle, the version is accepted or rejected, and the next cycle begins immediately.
+The within-group split from \S\ref{sec:design} creates a two-armed bandit problem: for each rollout, the system must choose between $\mathcal{V}_{\text{new}}$ and $\mathcal{V}_{\text{old}}$, balancing \textit{evaluation} (gathering evidence about which version is better) against \textit{exploitation} (using the apparently better version for training). Thompson Sampling \citep{thompson1933likelihood, russo2018tutorial} handles both naturally: it allocates more rollouts to the version that appears better, improving training efficiency, while maintaining stochastic exploration of the alternative, gathering evidence for the accept/reject decision.
 
-The within-group allocation is a two-armed bandit problem: we must balance \textit{evaluating} which version is better against \textit{exploiting} the currently-favored version for better training outcomes. Thompson Sampling \citep{thompson1933likelihood, russo2018tutorial} achieves both naturally---it allocates more rollouts to the version that appears better (improving training efficiency) while maintaining stochastic exploration of the alternative (gathering evidence for the accept/reject decision).
+The evolution operates in cycles of $K_e$ training steps. At the start of each cycle, the creator pipeline (\S\ref{sec:skill_creator}) proposes a candidate version; the within-group split evaluates it over $K_e$ steps; at the end of the cycle, the version is accepted or rejected, and the next cycle begins immediately.
 
 \rparagraph{Version Assignment}
-Each arm maintains a Beta posterior over its success probability, initialized with uniform priors $\text{Beta}(1, 1)$:
+Each arm maintains a Beta posterior over its success probability, initialized with uniform priors $\text{Beta}(1, 1)$. At the start of each rollout, the version assignment $d_i$ from Eq.~(\ref{eq:scrl_objective}) is sampled by drawing $p_{\text{new}} \sim \text{Beta}(\alpha_{\text{new}}, \beta_{\text{new}})$ and $p_{\text{old}} \sim \text{Beta}(\alpha_{\text{old}}, \beta_{\text{old}})$, then assigning:
 \begin{equation}
-    p_{\text{new}} \sim \text{Beta}(\alpha_{\text{new}}, \beta_{\text{new}}), \quad p_{\text{old}} \sim \text{Beta}(\alpha_{\text{old}}, \beta_{\text{old}}).
-    \label{eq:thompson_posteriors}
-\end{equation}
-At the start of each episode, the version assignment is sampled via Thompson Sampling:
-\begin{equation}
-    d = \mathbf{1}[p_{\text{new}} > p_{\text{old}}], \quad \text{with } \Pr(\text{new}) = \text{clamp}\!\left(\Pr(p_{\text{new}} > p_{\text{old}}),\, \varepsilon_{\text{ts}},\, 1{-}\varepsilon_{\text{ts}}\right),
+    d_i = \mathbf{1}[p_{\text{new}} > p_{\text{old}}], \quad \text{with } \Pr(\text{new}) = \text{clamp}\!\left(\Pr(p_{\text{new}} > p_{\text{old}}),\, \varepsilon_{\text{ts}},\, 1{-}\varepsilon_{\text{ts}}\right),
     \label{eq:thompson_decision}
 \end{equation}
-where $\varepsilon_{\text{ts}} = 0.2$ ensures sufficient exploration of both versions~\citep{russo2018tutorial}. All steps within a single rollout use the assigned version's skill library.
+where $\varepsilon_{\text{ts}} = 0.2$ ensures sufficient exploration of both versions. All steps within a single rollout use the assigned version's skill library.
 
-\rparagraph{Adaptive Discount Posterior}
-Unlike classical bandit settings where arm rewards are stationary, the policy $\pi_\theta$ evolves during each evaluation cycle: the arm success probability $p_{a,t} = P(\text{success} \mid \text{arm } a, \pi_{\theta_t})$ changes with each GRPO update. The standard Beta posterior, which pools all episodes equally, conflates data from multiple policies and introduces staleness bias. We address this with a \textit{sample-size-adaptive discount}: at each step~$t$, existing pseudo-counts are shrunk before incorporating the $m_t$ successes out of $n_t$ episodes assigned to each arm:
+\rparagraph{Adaptive Discount for Policy Non-Stationarity}
+In a classical bandit, arm rewards are stationary, so pooling all past observations is optimal. Here, the policy $\pi_\theta$ changes at every GRPO update, so a success observed 50 steps ago may reflect a fundamentally different policy. The posterior must ``forget'' old evidence at a rate calibrated to how fast the policy is changing, or the accumulated pseudo-counts anchor the estimate to stale data. We achieve this with a \textit{sample-size-adaptive discount}: at each step~$t$, existing pseudo-counts are shrunk before incorporating the $m_t$ successes out of $n_t$ new episodes:
 \begin{equation}
     \alpha \leftarrow w_t \cdot \alpha + m_t, \quad \beta \leftarrow w_t \cdot \beta + (n_t - m_t), \qquad w_t = \frac{1}{1 + n_t/M},
     \label{eq:beta_update}
 \end{equation}
-where $M > 0$ is a scalar \emph{memory parameter}. Written as $w_t = 1/(1 + n_t/M)$, the discount interpolates smoothly between full retention ($w_t \to 1$ when $n_t \ll M$) and aggressive forgetting ($w_t \to 0$ when $n_t \gg M$), with the crossover at $n_t = M$ ($w_t = 1/2$). The posterior remains a valid Beta distribution with this multiplicative discount, so Thompson Sampling applies directly. We estimate $M$ from data via sequential predictive-likelihood maximization on completed evaluation cycles (Appendix~\ref{app:staleness_details}), requiring no manual tuning.
-\textcolor{cyan}{Haotian: This selection of $w_{t}$ cannot be principally justified by likelihood or variance-bias trade-off. To justify the choice of this specific form, we can ablation on $w_t = \left( \frac{1}{1 + n_t/M} \right)^{\gamma}$ with different $\gamma$.}
+where $M > 0$ is a scalar \emph{memory parameter} that controls the crossover: when a step contributes few episodes ($n_t \ll M$), old evidence is largely retained ($w_t \to 1$); when a step contributes many ($n_t \gg M$), old evidence is aggressively discounted ($w_t \to 0$). The posterior remains a valid Beta distribution, so Thompson Sampling applies directly. We estimate $M$ from data via sequential predictive-likelihood maximization on completed evaluation cycles (Appendix~\ref{app:staleness_details}), requiring no manual tuning.
 
-\rparagraph{Accept/Reject Decision}
-At the end of each cycle, the proposed version is accepted if the adaptively-discounted posterior mean of the new arm exceeds that of the old arm:
+At the end of each cycle, the candidate is accepted if its discounted posterior mean $\bar{\mu}_{\text{new}}$ exceeds that of the current version $\bar{\mu}_{\text{old}}$:
 \begin{equation}
-    \text{accept}(\mathcal{V}_{\text{new}}) = \mathbf{1}\!\left[\frac{\alpha_{\text{new}}}{\alpha_{\text{new}} + \beta_{\text{new}}} > \frac{\alpha_{\text{old}}}{\alpha_{\text{old}} + \beta_{\text{old}}}\right],
+    \text{accept}(\mathcal{V}_{\text{new}}) = \mathbf{1}\!\left[\bar{\mu}_{\text{new}} > \bar{\mu}_{\text{old}}\right],
     \label{eq:accept}
 \end{equation}
-where $\alpha, \beta$ are the discounted pseudo-counts from Eq.~(\ref{eq:beta_update}). Because old evidence is downweighted, this decision reflects the skill version's value under the \textit{current} policy, not a mixture of past policies. If accepted, $\mathcal{V}_{\text{new}}$ becomes the new baseline; if rejected, the skill bank reverts to $\mathcal{V}_{\text{old}}$. In either case, the next cycle begins immediately.
+where $\bar{\mu}_a = \mathbb{E}[p_a]$ is the posterior mean of arm $a$ under the discounted Beta posterior from Eq.~(\ref{eq:beta_update}). Because old evidence is downweighted, this decision reflects the version's value under the \textit{current} policy, not a mixture of past policies. If accepted, $\mathcal{V}_{\text{new}}$ becomes the new baseline; if rejected, the skill bank reverts to $\mathcal{V}_{\text{old}}$.
 
 
 \begin{algorithm}[t]
@@ -189,7 +184,7 @@ where $\alpha, \beta$ are the discounted pseudo-counts from Eq.~(\ref{eq:beta_up
 \end{footnotesize}
 \end{algorithm}
 
-The complete procedure for \ours~is provided in Algorithm~\ref{alg:scrl}. Overall, the assertion-driven skill creator replaces ad-hoc prompt engineering with structured, quantitative failure analysis, while the version-level Thompson Sampling mechanism provides principled, data-efficient validation of skill library changes using only the data already generated by GRPO training.
+The complete procedure is summarized in Algorithm~\ref{alg:scrl}. The skill creator replaces ad-hoc prompt engineering with structured failure analysis, while version-level Thompson Sampling provides principled, data-efficient validation of skill changes using only the rollouts already generated by GRPO training.
 
 
 %=============================================================================
@@ -316,7 +311,7 @@ Reinforcement learning has become a powerful paradigm for post-training LLMs, fr
 LLM agents interact with environments through tool use \citep{yao2023react}. IRCoT \citep{trivedi-etal-2023-interleaving} interleaves chain-of-thought reasoning \citep{wei2022chain} with information retrieval. Toolformer \citep{schick2023toolformer} teaches tool usage via SFT. The RL paradigm has enabled multi-turn tool interactions \citep{feng2025retool, li2025torl}, with search tools excelling at question answering \citep{jin2025search, song2025r1}. End-to-end RL frameworks for tool use \citep{xue2025simpletir, jiang2025verltool} have grown rapidly, yet the role of \textit{dynamic skill guidance} during RL training has been largely unexplored: all existing approaches rely on static instructions designed before training begins.
 
 \rparagraph{Skill and Instruction Optimization}
-The performance of LLM agents is highly sensitive to their guiding instructions \citep{zhou2025multi}. Automated prompt optimization (APO) approaches use paraphrasing \citep{zhou2023large}, LLM-based optimizers \citep{yang2024large}, or textual gradients \citep{pryzant-etal-2023-automatic, 2025textgrad} to improve instructions, but operate offline. INSPO \citep{zhou2025inspo} is the first to integrate instruction optimization into the RL loop via a population-based approach with softmax-weighted sampling and successive halving \citep{jamieson2016non}. In the skill domain, Reflexion \citep{shinn2023reflexion} accumulates verbal feedback, ExpeL \citep{zhao2024expel} extracts experiential rules, MemRL \citep{zhang2026memrl} evolves episodic memory, and SkillRL \citep{xia2025skillrl} distills teacher-model skills for RL augmentation. Anthropic's Skill Creator \citep{anthropic2025skillcreator} pioneered the automated creation of modular, trigger-based skills from agent experience. \ours~builds on this paradigm but replaces the human judge with RL reward signals and integrates skill creation directly into the training loop, enabling online co-evolution rather than static augmentation.
+The performance of LLM agents is highly sensitive to their guiding instructions \citep{zhou2025multi}. Automated prompt optimization (APO) approaches use paraphrasing \citep{zhou2023large}, LLM-based optimizers \citep{yang2024large}, or textual gradients \citep{pryzant-etal-2023-automatic, 2025textgrad} to improve instructions, but operate offline. In the skill domain, Reflexion \citep{shinn2023reflexion} accumulates verbal feedback, ExpeL \citep{zhao2024expel} extracts experiential rules, MemRL \citep{zhang2026memrl} evolves episodic memory, and SkillRL \citep{xia2025skillrl} distills teacher-model skills for RL augmentation. Anthropic's Skill Creator \citep{anthropic2025skillcreator} pioneered the automated creation of modular, trigger-based skills from agent experience. More recent concurrent work integrates guidance optimization into the RL loop: INSPO \citep{zhou2025inspo} maintains a population of instructions and samples one per group via softmax-weighted selection, while EMPO$^2$ \citep{liu2026exploratory} alternates between memory-augmented and memory-free prompting across training iterations. Both approaches, however, assign a single prompt configuration to all rollouts within a group, so the effect of a guidance change is confounded with inter-task variance. \ours~instead splits rollouts \textit{within} each group for the same task, isolating the skill version as the sole variable and enabling controlled, per-version evaluation via Thompson Sampling.
 
 \rparagraph{Bandit Methods for Online Selection}
 Thompson Sampling \citep{thompson1933likelihood} is a Bayesian approach to the multi-armed bandit problem that maintains posterior distributions over arm rewards and samples actions proportionally to their probability of being optimal \citep{russo2018tutorial}. In the context of RL-based agent training, INSPO \citep{zhou2025inspo} uses softmax-weighted sampling over an instruction population. \ours~instead employs per-skill Thompson Sampling with trigger-gated counting: each skill maintains independent Beta posteriors updated only from episodes where its trigger fires, providing a natural handle for the heterogeneous activation patterns of different skill types.
@@ -356,10 +351,155 @@ For completeness, the full GRPO objective \citep{shao2024deepseekmath} is:
 \end{equation}
 where $\rho_{i,t}(\theta) = {\pi_\theta(\tau_{i,t}|\tau_{i,<t})}/{\pi_{\theta_{\text{old}}}(\tau_{i,t}|\tau_{i,<t})}$ is the token-level importance ratio, $\hat{A}_i = ({r_i - \text{mean}(\{r_j\}_{j=1}^{G})})/{\text{std}(\{r_j\}_{j=1}^{G})}$ is the group-normalized advantage, $\epsilon$ is the clip ratio, and $\beta$ controls the KL divergence penalty $\mathbb{D}_{\text{KL}}(\pi_\theta \| \pi_{\text{ref}})$. The indicator $\mathcal{I}_{i,t}$ masks out environment observation tokens so that gradients are computed only over the agent's own tokens \citep{jin2025search, xue2025simpletir}.
 
-\section{Trigger Condition Types}
+\section{Skill Creator Pipeline: Full Details}
+\label{app:skill_pipeline}
+
+This appendix provides the full details of the skill creator pipeline summarized in \S\ref{sec:skill_creator}. We describe each stage in the order it executes within an evolution cycle, mapping each to the corresponding phase of Anthropic's Skill Creator \citep{anthropic2025skillcreator}.
+
+\subsection{Reservoir Collection (Test Execution)}
+
+In Skill Creator, each evaluation cycle spawns parallel subagents to execute a task with and without the skill, producing paired outputs for comparison. In \ours, the within-group GRPO rollouts from \S\ref{sec:design} serve this role directly. Each trajectory $\tau_i$ is already tagged with its version assignment $d_i \in \{\mathcal{V}_{\text{new}}, \mathcal{V}_{\text{old}}\}$ and binary reward $r(\tau_i)$. Failed trajectories ($r(\tau_i) < 1$) enter the bounded failure reservoir $\mathcal{R}$, maintained as a sliding window over recent training steps so that the failure landscape reflects the current policy rather than historical behavior. Successful trajectories from both versions provide contrast when the analyzer selects representative episodes.
+
+The reservoir replaces Skill Creator's small test case set (typically 2--3 prompts each run 3 times) with hundreds of diverse episodes collected at zero additional cost, since the rollouts are generated for GRPO regardless.
+
+\subsection{Assertion Grading and Reservoir-Level Diagnosis}
+
+\rparagraph{Assertion Types}
+The assertion grader $\mathcal{G}$ maintains a dynamic set of rule-based assertions $\mathcal{A} = \{\phi_j\}$, where each assertion $\phi_j = (\text{check}_j, \text{params}_j)$ is a predicate over trajectories. The following assertion types are supported:
+
+\begin{itemize}[itemsep=2pt, leftmargin=*]
+    \item \texttt{action\_exists}: Tests whether a specific action (by regex) appears anywhere in the trajectory. Example: $\text{params} = \{\texttt{pattern}: \texttt{"search\textbackslash[.*\textbackslash]"}\}$ checks whether the agent ever issued a search action.
+    \item \texttt{action\_not\_exists}: Tests whether an action pattern is \textit{absent} from the trajectory.
+    \item \texttt{action\_before}: Tests temporal ordering between two action patterns. Example: $\text{params} = \{\texttt{first}: \texttt{"search"}, \texttt{second}: \texttt{"submit"}\}$ checks that a search preceded the final submission.
+    \item \texttt{final\_action}: Tests whether the last action matches a given pattern. Useful for detecting premature termination.
+    \item \texttt{no\_consecutive\_repeat}: Tests whether the agent avoids repeating the same action consecutively more than $n$ times.
+    \item \texttt{min\_steps} / \texttt{max\_steps}: Tests trajectory length bounds. Detects both under-exploration and unproductive looping.
+    \item \texttt{action\_count}: Tests whether a specific action type appears at least (or at most) $n$ times.
+    \item \texttt{observation\_contains}: Tests whether the environment's observation at any step contains a target string, checking whether the agent reached specific states.
+\end{itemize}
+
+\rparagraph{Grading}
+Given the failure reservoir $\mathcal{R}$, the grader evaluates every trajectory against all assertions, producing per-assertion pass rates:
+\begin{equation}
+    \hat{r}_j = |\mathcal{R}|^{-1} \sum_{\tau \in \mathcal{R}} \mathbf{1}[\text{check}_j(\tau, \text{params}_j)].
+\end{equation}
+Low pass rates identify prevalent failure modes (e.g., $\hat{r}_j = 0.23$ for \texttt{action\_before(search, submit)} reveals that 77\% of failures never searched before submitting). The grading is entirely rule-based with no LLM calls, enabling evaluation of the full reservoir rather than a subsample.
+
+\rparagraph{Assertion Analysis and Evolution}
+An LLM-based assertion analyzer $\mathcal{Z}$ receives: (1) the per-assertion pass rates, (2) a stratified sample of trajectories from $\mathcal{R}$ (balancing successes and failures, diversity of failure types), and (3) a summary of the current skill bank $\mathcal{S}$. The analyzer produces two outputs:
+
+\begin{enumerate}[itemsep=2pt]
+    \item \textbf{Failure diagnosis} $\mathcal{F}_{\text{diag}}$: A prevalence-ranked list of failure patterns, each annotated with the supporting assertion pass rates and selected representative episodes. The diagnosis identifies which behavioral patterns most need skill intervention.
+    \item \textbf{Assertion CRUD operations}: The analyzer evolves $\mathcal{A}$ itself:
+    \begin{itemize}[itemsep=1pt]
+        \item \textsc{add}: Introduces new assertions for failure modes not covered by existing checks (e.g., discovering that the agent repeatedly visits already-explored locations, motivating a new \texttt{no\_consecutive\_repeat} assertion).
+        \item \textsc{delete}: Removes non-discriminating assertions that always pass regardless of trajectory quality, analogous to Skill Creator's grader flagging ``weak assertions.''
+        \item \textsc{modify}: Refines assertion parameters (e.g., tightening a regex pattern or adjusting a step count threshold) as the policy's behavior evolves.
+    \end{itemize}
+\end{enumerate}
+
+This self-evolving assertion mechanism mirrors Skill Creator's grader self-critique, where the Grader agent flags non-discriminating assertions and missing coverage. The key adaptation is scale: Skill Creator runs assertions against 2--3 test cases; we evaluate across the entire reservoir, giving the assertion pass rates statistical significance.
+
+\subsection{Version Proposal: Analyst--Author Decomposition}
+
+The main text presents version proposal as a single agent call. In implementation, it is decomposed into two LLM calls with distinct roles, following the principle of separating analytical reasoning from creative content generation.
+
+\rparagraph{Version Analyst}
+The version analyst receives:
+\begin{itemize}[itemsep=2pt, leftmargin=*]
+    \item The failure diagnosis $\mathcal{F}_{\text{diag}}$ with prevalence-ranked patterns
+    \item The current skill bank $\mathcal{S}$ with all active skills
+    \item The complete history of prior version proposals and their accept/reject outcomes from Thompson Sampling, including the A/B success rates that led to each decision
+    \item Action-pattern frequency statistics from recent rollouts (which patterns the agent commonly produces)
+    \item Selected representative episodes (both failures illustrating the diagnosed patterns and successes for contrast)
+\end{itemize}
+
+The analyst produces a \textit{change plan} $\mathcal{P}$: a coherent set of intended operations, each specifying:
+\begin{itemize}[itemsep=2pt, leftmargin=*]
+    \item \textbf{Operation type}: \textsc{add} (new skill), \textsc{modify} (revise existing skill), or \textsc{delete} (remove skill)
+    \item \textbf{Rationale}: Which failure pattern from $\mathcal{F}_{\text{diag}}$ motivates this operation
+    \item \textbf{Intent}: High-level description of what the skill should achieve (for \textsc{add}/\textsc{modify})
+    \item \textbf{Target}: Which existing skill to modify or delete (for \textsc{modify}/\textsc{delete})
+\end{itemize}
+
+The analyst prioritizes: unaddressed failure patterns for additions; skills whose guidance contradicts observed successful behavior for modifications; and skills the policy has internalized (high reward with or without the skill, or chronically low trigger rates) for deletions. The total number of active skills is capped at $K_{\max}$.
+
+\rparagraph{Version Author}
+The version author receives the change plan $\mathcal{P}$ along with a scoped context: only the referenced existing skills and the trajectories cited in the plan's rationale. This scoping prevents the author from being distracted by the full diagnostic context and focuses it on executing the plan.
+
+For each operation in $\mathcal{P}$, the author writes:
+\begin{itemize}[itemsep=2pt, leftmargin=*]
+    \item \textbf{Skill content} $c_k$: Three structured fields following the SKILL.md format:
+    \begin{itemize}[itemsep=1pt]
+        \item \texttt{when\_to\_use}: Situational applicability description (when the agent should consider this skill)
+        \item \texttt{action}: Concrete behavioral guidance
+        \item \texttt{examples}: DO/DON'T trajectory snippets grounded in the representative episodes
+    \end{itemize}
+    \item \textbf{Trigger condition} $\text{trig}_k$: Type (general, beginning, or action-pattern) and pattern (regex for action-pattern triggers)
+    \item \textbf{Metadata}: Skill name, description, and version number
+\end{itemize}
+
+The combined output of analyst and author constitutes the candidate version $\mathcal{V}_{\text{new}}$, which then enters the verification gate before A/B testing.
+
+\rparagraph{Version History as Cross-Cycle Learning}
+In Skill Creator, human-written \texttt{feedback.json} gates every body improvement: the human reviews outputs in the eval-viewer, writes specific feedback, and Claude rewrites accordingly. In \ours, the version history replaces this feedback loop. Each completed A/B test records: the proposed operations, the per-version success rates under Thompson Sampling, and the accept/reject outcome. The analyst sees this full history when proposing the next version, enabling it to: avoid repeating rejected strategies, build incrementally on accepted changes, and calibrate the aggressiveness of proposed modifications based on past acceptance rates.
+
+\section{Trigger Condition Types and Validation}
 \label{app:triggers}
 
-% TODO: Detail the specific trigger types (general, beginning, action\_pattern) with examples.
+\subsection{Trigger Types}
+
+Each skill $S_k = (c_k, \text{trig}_k)$ has a deterministic trigger condition evaluated at every step of a rollout. The trigger determines whether the skill's content is injected into the agent's prompt at that step.
+
+\rparagraph{General Triggers}
+Skills with \texttt{trigger\_type = general} fire at every step of every episode. These encode broad strategic principles applicable regardless of the agent's current state (e.g., ``verify the answer before submitting''). General skills are always present in the agent's context.
+
+\rparagraph{Beginning Triggers}
+Skills with \texttt{trigger\_type = beginning} fire only at step $t = 0$ (episode initialization). These provide planning-level guidance for how to approach the task (e.g., ``break multi-hop questions into sub-questions before searching'') without cluttering mid-episode prompts.
+
+\rparagraph{Action-Pattern Triggers}
+Skills with \texttt{trigger\_type = action\_pattern} fire when the agent's previous action $a_{t-1}$ matches a regex pattern stored in \texttt{trigger\_pattern}. For example, a skill targeting search refinement might use \texttt{trigger\_pattern = "search\textbackslash[.*\textbackslash]"} to activate only after the agent has just performed a search action. This enables context-sensitive guidance: a skill about interpreting search results only appears after a search, not during unrelated actions.
+
+The trigger evaluation is fully deterministic and requires no LLM calls:
+\begin{equation}
+    \text{trig}_k(t, a_{t-1}) = \begin{cases}
+        1 & \text{if type}_k = \texttt{general} \\
+        \mathbf{1}[t = 0] & \text{if type}_k = \texttt{beginning} \\
+        \mathbf{1}[\texttt{regex}(\texttt{pattern}_k, a_{t-1})] & \text{if type}_k = \texttt{action\_pattern}
+    \end{cases}
+\end{equation}
+
+At step $t$, the active skill set is $\mathcal{S}_{\text{active}}(t) = \{S_k \in \mathcal{S} : \text{trig}_k(t, a_{t-1}) = 1\}$.
+
+\subsection{Selective Loading via \texttt{when\_to\_use}}
+
+Even after trigger-based filtering, multiple skills may be active simultaneously. Each skill's content $c_k$ includes a \texttt{when\_to\_use} field describing its situational applicability in natural language. The agent reads these descriptions and selects only the most relevant to its current state, creating a two-level filter:
+
+\begin{enumerate}[itemsep=2pt]
+    \item \textbf{Deterministic trigger}: Gates whether the skill's content enters the prompt at all. Low computational cost, no LLM overhead.
+    \item \textbf{Model-level selection}: The agent's own judgment determines whether to \textit{adopt} the skill's guidance based on the \texttt{when\_to\_use} description and the current task context.
+\end{enumerate}
+
+This design mirrors Skill Creator's progressive disclosure architecture, where skill descriptions (~100 words) are always in context for routing, but the full skill body is loaded only when triggered. In our setting, the trigger condition serves the routing role, and \texttt{when\_to\_use} serves the relevance-filtering role.
+
+\subsection{Trigger Validation and Optimization}
+
+Proposed triggers must be validated before the version enters A/B testing, to ensure that skills will actually fire during evaluation.
+
+\rparagraph{Trigger Rate Estimation}
+For each proposed skill in $\mathcal{V}_{\text{new}}$ with an action-pattern trigger, the pipeline estimates the trigger's firing rate over the reservoir:
+\begin{equation}
+    \hat{p}_{\text{trigger}} = |\mathcal{R}|^{-1} \sum_{\tau \in \mathcal{R}} \mathbf{1}\!\left[\exists\, t : \texttt{regex}(\texttt{pattern}_k, a_t^{(\tau)}) = \text{true}\right],
+\end{equation}
+where $a_t^{(\tau)}$ is the action at step $t$ of trajectory $\tau$. This estimates the fraction of episodes in which the skill would activate at least once.
+
+\rparagraph{Validation Gate}
+A proposed skill passes validation if $\hat{p}_{\text{trigger}} \geq \delta_{\text{trig}}$ (default $\delta_{\text{trig}} = 0.5$). If any proposed skill in $\mathcal{V}_{\text{new}}$ fails this gate, the entire version proposal is rejected and sent back to the version author for rewriting, with the low trigger rate provided as feedback. The retry loop allows up to 3 attempts before the evolution cycle is skipped entirely.
+
+Skills with \texttt{general} or \texttt{beginning} triggers bypass this validation, as they fire unconditionally or at a known rate.
+
+\rparagraph{Motivation}
+This validation mirrors Skill Creator's description optimization phase, which iteratively refines skill descriptions for trigger accuracy by testing against 20 evaluation queries. In our setting, the reservoir serves as the evaluation set, and the validation is a single deterministic check rather than an iterative optimization loop. A skill that never fires cannot be meaningfully evaluated in the A/B test and wastes the evaluation budget on a version that behaves identically to $\mathcal{V}_{\text{old}}$ for most episodes.
 
 \section{Adaptive Staleness Correction: Details}
 \label{app:staleness_details}
